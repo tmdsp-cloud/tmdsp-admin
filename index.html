@@ -833,7 +833,12 @@ function goFromUrl() {
 }
 goFromUrl();
 if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', ev => {
-  if (ev.data && ev.data.type === 'go' && ev.data.go) { state.go = ev.data.go; if (state.me) { prefetchGo(); loadStatus().catch(() => {}); } }
+  let go = ev.data && ev.data.type === 'go' ? ev.data.go : '';
+  // เผื่อ service worker รุ่นเก่า/ตัวจัดการของ Firebase ส่งข้อความแบบของ Firebase มาแทน
+  if (!go && ev.data && ev.data.isFirebaseMessaging && ev.data.messageType === 'notification-clicked') {
+    try { go = new URL((ev.data.fcmOptions && ev.data.fcmOptions.link) || '', location.href).searchParams.get('go') || ''; } catch (e) {}
+  }
+  if (go) { state.go = go; if (state.me) { prefetchGo(); loadStatus().catch(() => {}); } }
 });
 
 /* ---------- ตารางงานตามตำแหน่ง ---------- */
@@ -1025,7 +1030,7 @@ function perfBreak(t) {
   if (!t) return '';
   const N = { auth:'ตรวจสิทธิ์', photo:'บันทึกรูป', lock:'รอล็อก', work:'งานในล็อก', push:'ส่งแจ้งเตือน' };
   const ph = t.ph ? Object.keys(N).filter(k => t.ph[k] != null).map(k => N[k] + ' ' + t.ph[k]) : [];
-  const rd = t.rd ? Object.keys(t.rd).sort((a, b) => t.rd[b] - t.rd[a]).map(k => k + ' ' + t.rd[k]) : [];
+  const rd = t.rd ? Object.keys(t.rd).sort((a, b) => t.rd[b] - t.rd[a]).map(k => k + ' ' + t.rd[k] + (t.sz && t.sz[k] ? ' (' + t.sz[k] + ')' : '')) : [];
   if (!ph.length && !rd.length) return '';
   return (ph.length ? ph.join(' · ') : '') + (rd.length ? (ph.length ? '<br>' : '') + 'อ่านชีต: ' + rd.join(', ') : '');
 }
