@@ -244,7 +244,7 @@
 </style>
 </head>
 <body>
-<div id="busyBar" aria-hidden="true"></div><div id="busyPill" role="status" aria-live="polite"><span class="spin"></span><span id="busyPillText">กำลังโหลด…</span></div><div id="busyMask" role="alert" aria-live="assertive"><div class="box"><span class="spin"></span><span id="busyMaskText">กำลังบันทึก…</span></div></div>
+<div id="busyBar" aria-hidden="true"></div><div id="busyPill" role="status" aria-live="polite"><span class="spin"></span><span id="busyPillText">กำลังโหลด…</span></div><div id="busyMask" role="alert" aria-live="assertive"><div class="box"><span class="spin"></span><div><div id="busyMaskText">กำลังบันทึก…</div><div id="busyMaskSlow" class="muted hidden" style="font-size:13px;margin-top:4px">ยังรอเซิร์ฟเวอร์อยู่ อินเทอร์เน็ตอาจช้า</div><button id="busyMaskClose" class="link hidden" style="margin-top:6px;padding:0">ปิดหน้าต่างนี้ (ระบบยังส่งต่อเบื้องหลัง)</button></div></div></div>
 <div class="topbar hidden" id="topbar">
   <button class="round ham" id="tbMenu" aria-label="เปิดเมนู"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="dot hidden" id="tbMenuDot"></span></button>
   <div class="logo"><img src="logo-mark.png" alt="Tmd" class="logoimg"></div>
@@ -675,11 +675,20 @@ function busyPaint() {
   const r = busy.read > 0, w = busy.write > 0;
   $('busyBar').classList.toggle('on', r || w);
   if (!(r || w)) { clearTimeout(busy.tRead); clearTimeout(busy.tWrite); busy.tRead = busy.tWrite = null; $('busyPill').classList.remove('on'); $('busyMask').classList.remove('on'); return; }
-  if (w && !busy.tWrite && !$('busyMask').classList.contains('on')) busy.tWrite = setTimeout(() => { if (busy.write > 0) { $('busyMask').classList.add('on'); $('busyPill').classList.remove('on'); } }, 250);
-  if (!w) { clearTimeout(busy.tWrite); busy.tWrite = null; $('busyMask').classList.remove('on'); }
+  if (w && !busy.tWrite && !$('busyMask').classList.contains('on') && !busy.dismissed) busy.tWrite = setTimeout(() => {
+    if (busy.write > 0) {
+      $('busyMask').classList.add('on'); $('busyPill').classList.remove('on');
+      $('busyMaskSlow').classList.add('hidden'); $('busyMaskClose').classList.add('hidden');
+      clearTimeout(busy.tSlow); clearTimeout(busy.tClose);
+      busy.tSlow = setTimeout(() => $('busyMaskSlow').classList.remove('hidden'), 8000);
+      busy.tClose = setTimeout(() => $('busyMaskClose').classList.remove('hidden'), 15000);
+    }
+  }, 250);
+  if (!w) { clearTimeout(busy.tWrite); busy.tWrite = null; clearTimeout(busy.tSlow); clearTimeout(busy.tClose); busy.dismissed = false; $('busyMask').classList.remove('on'); }
   if (r && !w && !busy.tRead && !$('busyPill').classList.contains('on')) busy.tRead = setTimeout(() => { if (busy.read > 0 && busy.write === 0) $('busyPill').classList.add('on'); }, 400);
   if (!r) { clearTimeout(busy.tRead); busy.tRead = null; $('busyPill').classList.remove('on'); }
 }
+function busyDismiss() { busy.dismissed = true; clearTimeout(busy.tSlow); clearTimeout(busy.tClose); $('busyMask').classList.remove('on'); }
 function busyBegin(action) {
   if (SILENT_ACTS.indexOf(action) >= 0) return null;
   const write = READ_ACTS.indexOf(action) < 0;
@@ -698,18 +707,36 @@ function busyEnd(h) {
   if (h.btn) h.btn.classList.remove('is-busy');
   busyPaint();
 }
+document.addEventListener('DOMContentLoaded', () => { const b = $('busyMaskClose'); if (b) b.onclick = busyDismiss; });
 async function api(payload) {
   const h = busyBegin(payload && payload.action);
   try { return await apiRaw(payload); } finally { busyEnd(h); }
 }
+// รอคำตอบได้นานสุด: บันทึก 45 วิ / อ่าน 30 วิ (กันหน้าจอค้างตลอดไปเมื่อเน็ตหลุดกลางทาง)
 async function apiRaw(payload) {
   const t0 = performance.now();
-  const res = await fetch(API_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify(payload)
-  });
-  const text = await res.text();
+  const write = READ_ACTS.indexOf(payload && payload.action) < 0;
+  const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = ctl ? setTimeout(() => ctl.abort(), write ? 45000 : 30000) : null;
+  let res, text;
+  try {
+    res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload),
+      signal: ctl ? ctl.signal : undefined
+    });
+    text = await res.text();
+  } catch (e) {
+    if (e && e.name === 'AbortError') {
+      throw new Error(write
+        ? 'เซิร์ฟเวอร์ตอบช้าเกินไป รายการนี้อาจบันทึกไปแล้ว กรุณาตรวจในรายการของฉันก่อนส่งซ้ำ'
+        : 'โหลดข้อมูลนานเกินไป กรุณาลองใหม่');
+    }
+    throw new Error(write
+      ? 'ส่งไม่สำเร็จ ตรวจสอบอินเทอร์เน็ต รายการนี้อาจบันทึกไปแล้ว กรุณาตรวจในรายการของฉันก่อนส่งซ้ำ'
+      : 'เชื่อมต่อไม่สำเร็จ ตรวจสอบอินเทอร์เน็ตแล้วลองใหม่');
+  } finally { if (timer) clearTimeout(timer); }
   const total = Math.round(performance.now() - t0);
   try {
     const j = JSON.parse(text);
