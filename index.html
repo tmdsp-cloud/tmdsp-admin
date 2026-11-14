@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#34353C">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="TMDSP_HR">
+<meta name="apple-mobile-web-app-title" content="TMDSP Admin">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="apple-touch-icon" href="icon-v4-192.png">
-<link rel="icon" type="image/png" href="icon-v4-192.png">
-<title>TMDSP_HR</title>
+<link rel="apple-touch-icon" href="apple-touch-icon-v5.png">
+<link rel="icon" type="image/png" href="icon-v5-192.png">
+<title>TMDSP Administration</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -137,7 +137,7 @@
     #camVideo { max-height:58vh; }
   }
 
-  /* ===== ธีม TMDSP_HR (โทนเทาเข้ม + การ์ดขาว + เขียวเทียล) ===== */
+  /* ===== ธีม TMDSP Administration (โทนเทาเข้ม + การ์ดขาว + เขียวเทียล) ===== */
   :root { --bg:#34353c; --brand:#2f7d5b; --brand2:#e3f3ec; --green:#2f7d5b; --blue:#2f7d5b; --text:#1f2a37; --muted:#7a8696; --line:#e1e6ec; }
   body { background:var(--bg); font-family:"Noto Sans Thai","Sarabun",-apple-system,sans-serif;
     padding-top:calc(78px + env(safe-area-inset-top)); padding-bottom:calc(40px + env(safe-area-inset-bottom)); }
@@ -248,7 +248,7 @@
 <div class="topbar hidden" id="topbar">
   <button class="round ham" id="tbMenu" aria-label="เปิดเมนู"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="dot hidden" id="tbMenuDot"></span></button>
   <div class="logo"><img src="logo-mark.png" alt="Tmd" class="logoimg"></div>
-  <div class="who"><span id="tbName">TMDSP_HR</span><small id="tbSub">TMDSP_HR</small></div>
+  <div class="who"><span id="tbName">TMDSP Administration</span><small id="tbSub">TMDSP Administration</small></div>
   <button class="round hidden" id="tbBell" title="แจ้งเตือนบนมือถือ" aria-label="แจ้งเตือน"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/><line id="bellSlash" x1="3" y1="3" x2="21" y2="21" style="display:none"/></svg></button>
 
 </div>
@@ -256,7 +256,7 @@
 <nav class="sidebar hidden" id="navbar" aria-label="เมนูหลัก">
   <div class="sbhead">
     <div class="logo"><img src="logo-mark.png" alt="Tmd" class="logoimg"></div>
-    <div class="sbwho"><b id="sbName">TMDSP_HR</b><small id="sbSub"></small></div>
+    <div class="sbwho"><b id="sbName">TMDSP Administration</b><small id="sbSub"></small></div>
     <button class="sbx" id="sbClose" aria-label="ปิดเมนู">✕</button>
   </div>
   <button class="nv" data-nav="home"><i>🏠</i>หน้าหลัก</button>
@@ -275,7 +275,7 @@
 
   <!-- เข้าสู่ระบบ -->
   <div id="loginView" class="card hidden">
-    <div class="logo big"><img src="logo.png" alt="TMD (SAMUT PRAKAN) CO.,LTD." class="logofull"><span>TMDSP_HR</span></div>
+    <div class="logo big"><img src="logo.png" alt="TMD (SAMUT PRAKAN) CO.,LTD." class="logofull"><span>TMDSP Administration</span></div>
     <h1>เข้าสู่ระบบ</h1>
     <div class="muted" id="loginHint">กรอกรหัสพนักงานและ PIN</div>
     <input type="text" id="empCode" placeholder="รหัสพนักงาน" autocomplete="username" autocapitalize="off">
@@ -864,7 +864,7 @@ async function loadStatus() {
   $('empCode2').textContent = 'รหัส ' + r.employee.code + (r.employee.role !== 'employee' ? ' · ' + ROLE_LABEL[r.employee.role] : '');
   applyViewNav();
   $('tbName').textContent = r.employee.name;
-  $('tbSub').textContent = 'TMDSP_HR · ' + r.employee.code + (r.employee.role !== 'employee' ? ' · ' + ROLE_LABEL[r.employee.role] : '');
+  $('tbSub').textContent = 'TMDSP Admin · ' + r.employee.code + (r.employee.role !== 'employee' ? ' · ' + ROLE_LABEL[r.employee.role] : '');
   state.nextType = r.nextType;
   pushInit(r.push);
   paintPending(r);
