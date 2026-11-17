@@ -1549,10 +1549,10 @@ async function loadPayRun() {
   setMsg($('payRunMsg'), '');
   $('payRows').innerHTML = '<div class="muted">กำลังโหลด...</div>';
   try {
-    const r = await call({ action:'payrollRun', cycle:$('payCycleInput').value });
+    const r = await call({ action:'payrollRun', cycle:cycStartKey($('payCycleInput').value) });
     state.payRun = r;
-    $('payCycleInput').value = r.cycle.key;
-    $('payCycleText').textContent = cycleText(r.cycle) + ' (เลือกเดือนที่รอบเริ่มต้น)';
+    $('payCycleInput').value = cycEndMonth(r.cycle);
+    $('payCycleText').textContent = cycleText(r.cycle) + ' (เลือกเดือนที่รอบสิ้นสุด)';
     const info = $('payRunInfo'); info.innerHTML = '';
     const stLabel = r.run ? ({ draft:'ฉบับร่าง', pending:'รออนุมัติ', approved:'อนุมัติแล้ว', returned:'ส่งกลับแก้ไข' }[r.run.status]) : 'ยังไม่ได้จัดทำ';
     const l1 = document.createElement('div'); l1.className = 'nm'; l1.textContent = 'สถานะ: ' + stLabel; info.appendChild(l1);
@@ -1673,6 +1673,9 @@ $('payCsv').onclick = () => {
 /* ---------- Dashboard ---------- */
 const TH_MON = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 function thShort(s) { const p = s.split('-').map(Number); return p[2] + ' ' + TH_MON[p[1] - 1]; }
+// ตัวเลือกเดือนของรอบเงินเดือน/OT = "เดือนที่รอบสิ้นสุด" (26 ต.ค. – 25 พ.ย. = พฤศจิกายน) ส่วนรหัสรอบในระบบ/ชีตยังเป็นเดือนที่เริ่ม (2026-10) ไม่เปลี่ยน
+function cycEndMonth(c) { return c.end.slice(0, 7); }
+function cycStartKey(v) { if (!/^\d{4}-\d{2}$/.test(v || '')) return ''; const p = v.split('-').map(Number); return new Date(Date.UTC(p[0], p[1] - 2, 1)).toISOString().slice(0, 7); }
 function cycleText(c) { return 'รอบเงินเดือน ' + thShort(c.start) + ' – ' + thShort(c.end) + ' ' + (Number(c.end.slice(0, 4)) + 543); }
 function tile(label, value, sub) {
   const t = document.createElement('div'); t.className = 'tile';
@@ -2822,10 +2825,10 @@ async function loadOtReport() {
   box.innerHTML = '<div class="muted">กำลังโหลด...</div>';
   setMsg($('otReportMsg'), '');
   try {
-    const r = await call({ action:'otReport', month:$('otReportMonth').value });
+    const r = await call({ action:'otReport', month:cycStartKey($('otReportMonth').value) });
     state.otReport = r;
-    $('otReportMonth').value = r.cycle.key;
-    $('otReportCycle').textContent = cycleText(r.cycle) + ' (เลือกเดือนที่รอบเริ่มต้น)';
+    $('otReportMonth').value = cycEndMonth(r.cycle);
+    $('otReportCycle').textContent = cycleText(r.cycle) + ' (เลือกเดือนที่รอบสิ้นสุด)';
     box.innerHTML = '';
     if (r.waiting) setMsg($('otReportMsg'), 'มี ' + r.waiting + ' รายการที่อนุมัติแล้วแต่ยังไม่ถึงวันสรุป (ยังไม่นับในรายงาน)', '');
     if (!r.rows.length) { box.innerHTML = '<div class="muted">ยังไม่มี OT ที่บันทึกผลในรอบนี้</div>'; return; }
