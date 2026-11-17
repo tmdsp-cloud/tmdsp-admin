@@ -281,6 +281,7 @@
     <input type="text" id="empCode" placeholder="รหัสพนักงาน" autocomplete="username" autocapitalize="off">
     <input type="password" id="pin" placeholder="PIN 4-6 หลัก" inputmode="numeric" maxlength="6" autocomplete="current-password">
     <input type="password" id="pin2" class="hidden" placeholder="ยืนยัน PIN อีกครั้ง" inputmode="numeric" maxlength="6" autocomplete="new-password">
+    <input type="text" id="setupCode" class="hidden" placeholder="รหัสตั้ง PIN 6 หลัก (ขอจาก HR)" inputmode="numeric" maxlength="6" autocomplete="one-time-code">
     <button id="loginBtn" class="primary">เข้าสู่ระบบ</button>
     <div id="loginMsg"></div>
   </div>
@@ -476,6 +477,16 @@
       <div class="muted" style="margin-top:6px">ขอเบิกล่วงหน้า → บัญชีโอนให้ → เคลียร์ใบเสร็จให้จบภายในวันเดียวกัน</div>
       <div class="muted" id="pcSum" style="margin-top:6px"></div>
       <details id="pcFin" class="hidden" style="margin-top:8px"><summary><b>สรุปวันนี้ / เติมเงินสดย่อย</b></summary><div id="pcO" style="margin-top:6px"></div></details>
+      <details id="pcDayD" class="hidden" open style="margin-top:8px"><summary><b>📅 รายการเบิกรายวัน</b></summary>
+        <input type="date" id="pcDayDate" style="margin-top:8px">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:6px">
+          <button class="gray" id="pcDayPrev" style="padding:10px 4px">◀ วันก่อน</button>
+          <button class="gray" id="pcDayToday" style="padding:10px 4px">วันนี้</button>
+          <button class="gray" id="pcDayNext" style="padding:10px 4px">วันถัดไป ▶</button>
+        </div>
+        <div class="muted" id="pcDayTot" style="margin-top:6px"></div>
+        <div id="pcDayList" style="margin-top:6px"></div>
+      </details>
     </div>
     <div class="card">
       <div class="pctabs">
@@ -664,7 +675,7 @@ const perfLog = [];
 // ---------- ตัวแสดง "กำลังประมวลผล" ----------
 // คำสั่งอ่าน (ที่ผู้ใช้เพิ่งแตะ): แถบเลื่อนด้านบน + ป้าย "กำลังโหลด…" ; คำสั่งบันทึก: ฉากบังพร้อม "กำลังบันทึก…" กันกดซ้ำ
 // ปุ่มที่กดจะหมุนอยู่ในปุ่มจนเสร็จ ; คำขอเบื้องหลัง (โหลดล่วงหน้า/อัปเดตเลข) ไม่แสดงอะไร เพื่อไม่ให้กะพริบ
-const READ_ACTS = ['ping','calendar','status','dashboard','listEmployees','leaveOverview','otOverview','otReport','payrollMine','payrollRun','mgrHistory','expOverview','expPhoto','pcOverview','pcPhoto'];
+const READ_ACTS = ['ping','calendar','status','dashboard','listEmployees','leaveOverview','otOverview','otReport','payrollMine','payrollRun','mgrHistory','expOverview','expPhoto','pcOverview','pcDay','pcPhoto'];
 const SILENT_ACTS = ['ping','pushRegister','pushUnregister','dashboard']; // dashboard โหลดคู่ขนานเป็นส่วนเสริมของหน้าหลัก ไม่ต้องบัง
 const BUSY_TEXT = { login:'กำลังเข้าสู่ระบบ…', setpin:'กำลังตั้ง PIN…', checkin:'กำลังลงเวลา…' };
 const busy = { read:0, write:0, tRead:null, tWrite:null, lastTap:0 };
@@ -957,16 +968,19 @@ async function doLogin() {
   if (state.needSetPin && pin !== $('pin2').value.trim()) {
     return setMsg($('loginMsg'), 'PIN ทั้งสองช่องไม่ตรงกัน', 'err');
   }
+  if (state.needSetPin && !/^\d{6}$/.test($('setupCode').value.trim())) {
+    return setMsg($('loginMsg'), 'กรุณากรอกรหัสตั้ง PIN 6 หลักที่ HR ให้', 'err');
+  }
 
   $('loginBtn').disabled = true;
   setMsg($('loginMsg'), '');
   try {
-    const r = await api({ action: state.needSetPin ? 'setpin' : 'login', employeeCode:code, pin });
+    const r = await api({ action: state.needSetPin ? 'setpin' : 'login', employeeCode:code, pin, setupCode: state.needSetPin ? $('setupCode').value.trim() : undefined });
     if (!r.ok) {
       if (r.code === 'NEED_SET_PIN') {
         state.needSetPin = true;
-        $('pin2').classList.remove('hidden');
-        $('loginHint').textContent = 'เข้าใช้งานครั้งแรก กรุณาตั้ง PIN (ตัวเลข 4-6 หลัก) และกรอกยืนยัน';
+        $('pin2').classList.remove('hidden'); $('setupCode').classList.remove('hidden');
+        $('loginHint').textContent = 'เข้าใช้งานครั้งแรก: กรอกรหัสตั้ง PIN 6 หลักที่ HR ให้ แล้วตั้ง PIN (ตัวเลข 4-6 หลัก) และกรอกยืนยัน';
         $('loginBtn').textContent = 'ตั้ง PIN และเข้าสู่ระบบ';
         return;
       }
@@ -974,9 +988,9 @@ async function doLogin() {
     }
     store.set('token', r.token);
     store.set('empCode', r.employee.code);
-    $('pin').value = ''; $('pin2').value = '';
+    $('pin').value = ''; $('pin2').value = ''; $('setupCode').value = '';
     state.needSetPin = false;
-    $('pin2').classList.add('hidden');
+    $('pin2').classList.add('hidden'); $('setupCode').classList.add('hidden');
     $('loginBtn').textContent = 'เข้าสู่ระบบ';
     $('loginHint').textContent = 'กรอกรหัสพนักงานและ PIN';
     await loadStatus();
@@ -985,10 +999,10 @@ async function doLogin() {
   } finally { $('loginBtn').disabled = false; }
 }
 $('loginBtn').onclick = doLogin;
-['empCode','pin','pin2'].forEach(id => $(id).addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); }));
+['empCode','pin','pin2','setupCode'].forEach(id => $(id).addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); }));
 $('empCode').addEventListener('input', () => {
   if (state.needSetPin) { // เปลี่ยนรหัสพนักงาน ให้กลับไปโหมดปกติ
-    state.needSetPin = false; $('pin2').classList.add('hidden');
+    state.needSetPin = false; $('pin2').classList.add('hidden'); $('setupCode').classList.add('hidden');
     $('loginBtn').textContent = 'เข้าสู่ระบบ'; $('loginHint').textContent = 'กรอกรหัสพนักงานและ PIN';
   }
 });
@@ -2400,6 +2414,46 @@ function pcHead(r, withName) {
   left.appendChild(t);
   return left;
 }
+const pcDay = { date: null, seq: 0 };
+function pcShiftDay(d, n) { const p = d.split('-').map(Number); const t = new Date(Date.UTC(p[0], p[1] - 1, p[2] + n)); return t.toISOString().slice(0, 10); }
+async function loadPcDay(date) {
+  if (!date) return;
+  pcDay.date = date; $('pcDayDate').value = date;
+  const my = ++pcDay.seq;
+  $('pcDayTot').textContent = 'กำลังโหลด…';
+  try {
+    const r = await call({ action: 'pcDay', date });
+    if (my !== pcDay.seq) return;
+    const t = r.total, list = $('pcDayList'); list.innerHTML = '';
+    $('pcDayTot').textContent = t.count ? 'ทั้งหมด ' + t.count + ' ใบ · ยอดขอเบิก ' + fm2(t.amount) + ' ฿ · จ่ายแล้ว ' + t.paid + ' · แนบบิลแล้ว ' + t.bill + ' · ส่งตัวจริงแล้ว ' + t.docs + (t.rejected ? ' · ไม่อนุมัติ/ยกเลิก ' + t.rejected : '') : 'ไม่มีใบเบิกที่ยื่นในวันนี้';
+    r.items.forEach(x => {
+      const card = document.createElement('div'); card.style.cssText = 'padding:10px 0;border-top:1px solid #e5e7eb';
+      const nm = document.createElement('div'); nm.className = 'nm'; nm.textContent = x.name + ' · ' + fm2(x.amount) + ' ฿';
+      const m = document.createElement('div'); m.className = 'muted'; m.textContent = x.filed.slice(11, 16) + ' น. · ' + x.purpose + (x.project ? ' · โปรเจกต์ ' + x.project : '');
+      card.append(nm, m);
+      const row = document.createElement('div'); row.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-top:6px';
+      if (x.dead) {
+        const c = document.createElement('span'); c.className = 'pill'; c.style.cssText = 'background:#fee2e2;color:#991b1b'; c.textContent = x.statusLabel; row.appendChild(c);
+      } else {
+        [['req', 'เบิกแล้ว'], ['paid', 'จ่ายแล้ว'], ['bill', 'แนบบิลแล้ว'], ['docs', 'ส่งบิลตัวจริงแล้ว']].forEach(([k, label]) => {
+          const on = x.steps[k], c = document.createElement('span'); c.className = 'pill';
+          c.style.cssText = on ? 'background:#dcfce7;color:#166534' : 'background:#f3f4f6;color:#9ca3af';
+          c.textContent = (on ? '✓ ' : '○ ') + label; row.appendChild(c);
+        });
+      }
+      card.appendChild(row);
+      if (x.status === 'cleared' || x.status === 'closed') {
+        const u = document.createElement('div'); u.className = 'muted'; u.style.marginTop = '4px';
+        u.textContent = 'ใช้จริง ' + fm2(x.actual) + ' ฿' + (x.returnAmt ? ' · คืน ' + fm2(x.returnAmt) + ' ฿' : ''); card.appendChild(u);
+      }
+      list.appendChild(card);
+    });
+  } catch (e) { if (my === pcDay.seq && e.code !== 'AUTH') { $('pcDayTot').textContent = ''; setMsg($('pcMsg'), e.message, 'err'); } }
+}
+$('pcDayDate').onchange = () => loadPcDay($('pcDayDate').value);
+$('pcDayPrev').onclick = () => loadPcDay(pcShiftDay(pcDay.date || $('pcDayDate').value, -1));
+$('pcDayNext').onclick = () => loadPcDay(pcShiftDay(pcDay.date || $('pcDayDate').value, 1));
+$('pcDayToday').onclick = () => { const t = (pcState.data && pcState.data.today) || new Date().toISOString().slice(0, 10); loadPcDay(t); };
 async function loadPc() {
   try {
     await swr({ action:'pcOverview' }, (r, cached) => {
@@ -2409,6 +2463,8 @@ async function loadPc() {
       $('pcMineCount').textContent = r.owe ? 'รอเคลียร์ ' + r.owe : '';
       ['Q','B','C'].forEach(k => $('pcTab' + k).classList.toggle('hidden', !r.canManage));
       $('pcFin').classList.toggle('hidden', !r.canManage);
+      $('pcDayD').classList.toggle('hidden', !r.canDay);
+      if (r.canDay && !cached) loadPcDay(pcDay.date || r.today);
       renderPcMine(r.mine);
       if (r.canManage) {
         $('pcQCount').textContent = r.queue.length ? r.queue.length + ' ใบ' : '';
@@ -2869,9 +2925,10 @@ $('mSave').onclick = async () => {
 
   setModalBusy(true);
   setMsg($('mMsg'), '');
+  let createdRes = null;
   try {
     if (ctx.mode === 'create') {
-      await call({ action:'saveEmployee', mode:'create', code, name, ...prof, role: roleVisible ? $('mRole').value : 'employee' });
+      createdRes = await call({ action:'saveEmployee', mode:'create', code, name, ...prof, role: roleVisible ? $('mRole').value : 'employee' });
     } else {
       await call({ action:'saveEmployee', mode:'update', code, name, ...prof, disabled: $('mOff').checked });
       if (roleVisible && $('mRole').value !== ctx.target.role) {
@@ -2880,22 +2937,28 @@ $('mSave').onclick = async () => {
     }
     closeModal();
     await loadEmployees();
-    setMsg($('manageMsg'), 'บันทึกแล้ว', 'good');
+    if (createdRes && createdRes.setupCode) { showSetupCode(code, createdRes); }
+    else setMsg($('manageMsg'), 'บันทึกแล้ว', 'good');
   } catch (e) {
     if ($('modal').classList.contains('hidden')) return; // เซสชันหมดอายุ
     setMsg($('mMsg'), e.message, 'err');
   } finally { setModalBusy(false); }
 };
 
+function showSetupCode(code, r) {
+  const t = 'รหัสตั้ง PIN ของ ' + code + ' = ' + r.setupCode + '  (ใช้ได้ครั้งเดียว ภายใน ' + (r.hours || 72) + ' ชม.) แจ้งพนักงานทางส่วนตัว เพื่อใช้ตั้ง PIN ครั้งแรก รหัสนี้จะไม่แสดงอีก';
+  setMsg($('manageMsg'), t, 'good');
+  alert(t);
+}
 $('mReset').onclick = async () => {
   const ctx = modalCtx;
-  if (!ctx || !confirm('รีเซ็ต PIN ของ ' + ctx.target.name + ' ?\nพนักงานต้องตั้ง PIN ใหม่เมื่อเข้าสู่ระบบครั้งถัดไป')) return;
+  if (!ctx || !confirm('รีเซ็ต PIN ของ ' + ctx.target.name + ' ?\nระบบจะออกรหัสตั้ง PIN 6 หลักให้ส่งต่อพนักงาน')) return;
   setModalBusy(true);
   try {
-    await call({ action:'resetPin', code: ctx.target.code });
+    const rr = await call({ action:'resetPin', code: ctx.target.code });
     closeModal();
     await loadEmployees();
-    setMsg($('manageMsg'), 'รีเซ็ต PIN แล้ว แจ้งพนักงานให้ตั้ง PIN ใหม่ทันที', 'good');
+    showSetupCode(ctx.target.code, rr);
   } catch (e) {
     if (!$('modal').classList.contains('hidden')) setMsg($('mMsg'), e.message, 'err');
   } finally { setModalBusy(false); }
