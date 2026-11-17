@@ -477,13 +477,14 @@
       <div class="muted" style="margin-top:6px">ขอเบิกล่วงหน้า → บัญชีโอนให้ → เคลียร์ใบเสร็จให้จบภายในวันเดียวกัน</div>
       <div class="muted" id="pcSum" style="margin-top:6px"></div>
       <details id="pcFin" class="hidden" style="margin-top:8px"><summary><b>สรุปวันนี้ / เติมเงินสดย่อย</b></summary><div id="pcO" style="margin-top:6px"></div></details>
-      <details id="pcDayD" class="hidden" open style="margin-top:8px"><summary><b>📅 รายการเบิกรายวัน</b></summary>
+      <details id="pcDayD" class="hidden" open style="margin-top:8px"><summary><b id="pcDayTitle">📅 รายการเบิกรายวัน</b></summary>
+        <div id="pcDayCtl">
         <input type="date" id="pcDayDate" style="margin-top:8px">
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:6px">
           <button class="gray" id="pcDayPrev" style="padding:10px 4px">◀ วันก่อน</button>
           <button class="gray" id="pcDayToday" style="padding:10px 4px">วันนี้</button>
           <button class="gray" id="pcDayNext" style="padding:10px 4px">วันถัดไป ▶</button>
-        </div>
+        </div></div>
         <div class="muted" id="pcDayTot" style="margin-top:6px"></div>
         <div id="pcDayList" style="margin-top:6px"></div>
       </details>
@@ -2369,21 +2370,37 @@ function pcTab(name) {
 ['New','Mine','Q','B','C'].forEach(n => { $('pcTab' + n).onclick = () => pcTab(n); });
 $('pcBack').onclick = () => { loadStatus().catch(() => show('mainView')); };
 $('pcBtn').onclick = async () => { show('pcView'); pcTab('New'); setMsg($('pcMsg'), ''); await loadPc(); };
-async function pcShowPhoto(id, kind, idx, btn) {
+async function pcShowPhoto(id, kind, idx, btn, label) {
   const old = btn ? btn.textContent : '';
   if (btn) { btn.disabled = true; btn.textContent = 'กำลังโหลด...'; }
   try {
     const r = await call({ action:'pcPhoto', id:id, kind:kind, idx:idx || 0 });
     const ov = document.createElement('div');
-    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px';
-    const im = document.createElement('img'); im.src = r.dataUrl; im.style.cssText = 'max-width:100%;max-height:100%;border-radius:12px;background:#fff';
-    ov.appendChild(im); ov.onclick = () => ov.remove(); document.body.appendChild(ov);
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:99;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px';
+    const im = document.createElement('img'); im.src = r.dataUrl; im.style.cssText = 'max-width:100%;max-height:78%;border-radius:12px;background:#fff';
+    const bar = document.createElement('div'); bar.style.cssText = 'display:flex;gap:10px';
+    const mime = (/^data:([^;]+);/.exec(r.dataUrl) || [])[1] || 'image/jpeg';
+    const ext = mime.indexOf('png') >= 0 ? 'png' : mime.indexOf('webp') >= 0 ? 'webp' : 'jpg';
+    const dl = document.createElement('button'); dl.className = 'primary'; dl.style.cssText = 'padding:12px 20px;white-space:nowrap;width:auto'; dl.textContent = '⬇ ดาวน์โหลด';
+    dl.onclick = ev => {
+      ev.stopPropagation();
+      try {
+        const bin = atob(r.dataUrl.split(',')[1]), u8 = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+        const url = URL.createObjectURL(new Blob([u8], { type: mime }));
+        const a = document.createElement('a'); a.href = url; a.download = (label || ('pc-' + id + '-' + kind + (idx ? '-' + (idx + 1) : ''))) + '.' + ext;
+        document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000);
+      } catch (e) { alert('ดาวน์โหลดไม่สำเร็จ ลองกดค้างที่รูปแล้วเลือกบันทึกรูป'); }
+    };
+    const cl = document.createElement('button'); cl.className = 'gray'; cl.style.cssText = 'padding:12px 20px;white-space:nowrap;width:auto'; cl.textContent = 'ปิด';
+    cl.onclick = ev => { ev.stopPropagation(); ov.remove(); };
+    bar.append(dl, cl); ov.append(im, bar); ov.onclick = () => ov.remove(); document.body.appendChild(ov);
   } catch (e) { alert(e.message); }
   finally { if (btn) { btn.disabled = false; btn.textContent = old; } }
 }
-function pcLink(text, id, kind, idx) {
+function pcLink(text, id, kind, idx, label) {
   const b = document.createElement('button'); b.className = 'link'; b.textContent = text;
-  b.onclick = ev => { ev.preventDefault(); pcShowPhoto(id, kind, idx, b); }; return b;
+  b.onclick = ev => { ev.preventDefault(); pcShowPhoto(id, kind, idx, b, label); }; return b;
 }
 // ปุ่มเลือกรูป: onPick(dataUrl) จะถูกเรียกเมื่อเลือกและบีบอัดสำเร็จ
 function pcPicker(label, onPick, multi) {
@@ -2414,17 +2431,18 @@ function pcHead(r, withName) {
   left.appendChild(t);
   return left;
 }
-const pcDay = { date: null, seq: 0 };
+const pcDay = { date: null, seq: 0, mode: 'detail' };
 function pcShiftDay(d, n) { const p = d.split('-').map(Number); const t = new Date(Date.UTC(p[0], p[1] - 1, p[2] + n)); return t.toISOString().slice(0, 10); }
 async function loadPcDay(date) {
   if (!date) return;
-  pcDay.date = date; $('pcDayDate').value = date;
+  pcDay.date = date; if (pcDay.mode !== 'summary') $('pcDayDate').value = date;
   const my = ++pcDay.seq;
   $('pcDayTot').textContent = 'กำลังโหลด…';
   try {
     const r = await call({ action: 'pcDay', date });
     if (my !== pcDay.seq) return;
     const t = r.total, list = $('pcDayList'); list.innerHTML = '';
+    if (r.mode === 'summary') { renderPcDaySummary(r); return; }
     $('pcDayTot').textContent = t.count ? 'ทั้งหมด ' + t.count + ' ใบ · ยอดขอเบิก ' + fm2(t.amount) + ' ฿ · จ่ายแล้ว ' + t.paid + ' · แนบบิลแล้ว ' + t.bill + ' · ส่งตัวจริงแล้ว ' + t.docs + (t.rejected ? ' · ไม่อนุมัติ/ยกเลิก ' + t.rejected : '') : 'ไม่มีใบเบิกที่ยื่นในวันนี้';
     r.items.forEach(x => {
       const card = document.createElement('div'); card.style.cssText = 'padding:10px 0;border-top:1px solid #e5e7eb';
@@ -2442,6 +2460,22 @@ async function loadPcDay(date) {
         });
       }
       card.appendChild(row);
+      if (!x.dead) {
+        const sl = document.createElement('div'); sl.style.cssText = 'margin-top:6px;font-size:14px;display:grid;gap:3px';
+        const line = (label, ok, na, btns) => {
+          const d = document.createElement('div'); d.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;gap:6px';
+          const t = document.createElement('span'); t.textContent = label + ': ' + (ok ? '✓ แนบแล้ว' : (na || '○ ยังไม่แนบ')); t.style.color = ok ? '#166534' : '#6b7280';
+          d.appendChild(t); (btns || []).forEach(b => d.appendChild(b)); sl.appendChild(d);
+        };
+        line('สลิปโอนให้พนักงาน', x.hasSlip, null, x.hasSlip ? [pcLink('ดู / โหลด', x.id, 'slip', 0, 'สลิปโอน-' + x.id)] : []);
+        if (x.status === 'cleared' || x.status === 'closed') {
+          const rb = []; for (let i = 0; i < x.receiptCount; i++) rb.push(pcLink('รูป ' + (i + 1), x.id, 'receipt', i, 'ใบเสร็จ-' + x.id + '-' + (i + 1)));
+          line('ใบเสร็จ', x.receiptCount > 0, null, rb);
+          if (x.returnAmt > 0) line('สลิปโอนคืน (' + fm2(x.returnAmt) + ' ฿)', x.hasReturnSlip, null, x.hasReturnSlip ? [pcLink('ดู / โหลด', x.id, 'rslip', 0, 'สลิปคืน-' + x.id)] : []);
+          else line('สลิปโอนคืน', false, 'ไม่มีเงินคืน');
+        } else line('ใบเสร็จ', false, '○ รอพนักงานส่งเคลียร์');
+        card.appendChild(sl);
+      }
       if (x.status === 'cleared' || x.status === 'closed') {
         const u = document.createElement('div'); u.className = 'muted'; u.style.marginTop = '4px';
         u.textContent = 'ใช้จริง ' + fm2(x.actual) + ' ฿' + (x.returnAmt ? ' · คืน ' + fm2(x.returnAmt) + ' ฿' : ''); card.appendChild(u);
@@ -2449,6 +2483,24 @@ async function loadPcDay(date) {
       list.appendChild(card);
     });
   } catch (e) { if (my === pcDay.seq && e.code !== 'AUTH') { $('pcDayTot').textContent = ''; setMsg($('pcMsg'), e.message, 'err'); } }
+}
+function renderPcDaySummary(r) {
+  const list = $('pcDayList'), t = r.total;
+  $('pcDayTot').textContent = t.count ? 'รวม 30 วัน ' + t.count + ' ใบ · ยอดขอเบิก ' + fm2(t.amount) + ' ฿ · จ่ายแล้ว ' + fm2(t.paidAmount) + ' ฿ · ส่งตัวจริงแล้ว ' + t.docs + ' ใบ' : 'ไม่มีใบเบิกใน 30 วันที่ผ่านมา';
+  if (!r.days.length) return;
+  const tb = document.createElement('table'); tb.style.cssText = 'width:100%;border-collapse:collapse;font-size:14px';
+  const head = document.createElement('tr');
+  ['วันที่', 'ใบ', 'ยอดขอเบิก', 'จ่ายแล้ว', 'ส่งตัวจริง'].forEach((x, i) => { const th = document.createElement('th'); th.textContent = x; th.style.cssText = 'text-align:' + (i ? 'right' : 'left') + ';padding:6px 4px;border-bottom:2px solid #e5e7eb;font-weight:600;color:#6b7280;font-size:13px'; head.appendChild(th); });
+  tb.appendChild(head);
+  r.days.forEach(d => {
+    const tr = document.createElement('tr');
+    const dd = d.date.split('-'); const lab = dd[2] + '/' + dd[1] + '/' + dd[0] + (d.date === r.today ? ' (วันนี้)' : '');
+    [lab, d.count, fm2(d.amount), fm2(d.paidAmount), d.docs + '/' + d.count].forEach((x, i) => {
+      const td = document.createElement('td'); td.textContent = x; td.style.cssText = 'padding:8px 4px;border-bottom:1px solid #f1f5f9;text-align:' + (i ? 'right' : 'left'); tr.appendChild(td);
+    });
+    tb.appendChild(tr);
+  });
+  list.appendChild(tb);
 }
 $('pcDayDate').onchange = () => loadPcDay($('pcDayDate').value);
 $('pcDayPrev').onclick = () => loadPcDay(pcShiftDay(pcDay.date || $('pcDayDate').value, -1));
@@ -2464,7 +2516,9 @@ async function loadPc() {
       ['Q','B','C'].forEach(k => $('pcTab' + k).classList.toggle('hidden', !r.canManage));
       $('pcFin').classList.toggle('hidden', !r.canManage);
       $('pcDayD').classList.toggle('hidden', !r.canDay);
-      if (r.canDay && !cached) loadPcDay(pcDay.date || r.today);
+      if (r.canDay) { pcDay.mode = r.dayMode; $('pcDayCtl').classList.toggle('hidden', r.dayMode === 'summary');
+        $('pcDayTitle').textContent = r.dayMode === 'summary' ? '📅 สรุปเบิกเงินสดย่อยรายวัน (30 วันล่าสุด)' : '📅 รายการเบิกรายวัน';
+        if (!cached) loadPcDay(pcDay.date || r.today); }
       renderPcMine(r.mine);
       if (r.canManage) {
         $('pcQCount').textContent = r.queue.length ? r.queue.length + ' ใบ' : '';
