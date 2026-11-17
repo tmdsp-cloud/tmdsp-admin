@@ -477,6 +477,12 @@
       <div class="muted" style="margin-top:6px">ขอเบิกล่วงหน้า → บัญชีโอนให้ → เคลียร์ใบเสร็จให้จบภายในวันเดียวกัน</div>
       <div class="muted" id="pcSum" style="margin-top:6px"></div>
       <details id="pcFin" class="hidden" style="margin-top:8px"><summary><b>สรุปวันนี้ / เติมเงินสดย่อย</b></summary><div id="pcO" style="margin-top:6px"></div></details>
+      <details id="pcChartD" class="hidden" open style="margin-top:8px"><summary><b>📊 กราฟการเบิกเงินสดย่อย</b></summary>
+        <div class="muted" style="margin-top:8px"><b>รายวัน ย้อนหลัง 30 วัน</b> (ยอดขอเบิก บาท)</div>
+        <div id="pcChartDay"></div><div class="muted" id="pcChartDayCap" style="min-height:20px"></div>
+        <div class="muted" style="margin-top:10px"><b>รายเดือน</b> (1 – สิ้นเดือน ย้อนหลัง 12 เดือน)</div>
+        <div id="pcChartMon"></div><div class="muted" id="pcChartMonCap" style="min-height:20px"></div>
+      </details>
       <details id="pcDayD" class="hidden" open style="margin-top:8px"><summary><b id="pcDayTitle">📅 รายการเบิกรายวัน</b></summary>
         <div id="pcDayCtl">
         <input type="date" id="pcDayDate" style="margin-top:8px">
@@ -676,7 +682,7 @@ const perfLog = [];
 // ---------- ตัวแสดง "กำลังประมวลผล" ----------
 // คำสั่งอ่าน (ที่ผู้ใช้เพิ่งแตะ): แถบเลื่อนด้านบน + ป้าย "กำลังโหลด…" ; คำสั่งบันทึก: ฉากบังพร้อม "กำลังบันทึก…" กันกดซ้ำ
 // ปุ่มที่กดจะหมุนอยู่ในปุ่มจนเสร็จ ; คำขอเบื้องหลัง (โหลดล่วงหน้า/อัปเดตเลข) ไม่แสดงอะไร เพื่อไม่ให้กะพริบ
-const READ_ACTS = ['ping','calendar','status','dashboard','listEmployees','leaveOverview','otOverview','otReport','payrollMine','payrollRun','mgrHistory','expOverview','expPhoto','pcOverview','pcDay','pcPhoto'];
+const READ_ACTS = ['ping','calendar','status','dashboard','listEmployees','leaveOverview','otOverview','otReport','payrollMine','payrollRun','mgrHistory','expOverview','expPhoto','pcOverview','pcDay','pcCharts','pcPhoto'];
 const SILENT_ACTS = ['ping','pushRegister','pushUnregister','dashboard']; // dashboard โหลดคู่ขนานเป็นส่วนเสริมของหน้าหลัก ไม่ต้องบัง
 const BUSY_TEXT = { login:'กำลังเข้าสู่ระบบ…', setpin:'กำลังตั้ง PIN…', checkin:'กำลังลงเวลา…' };
 const busy = { read:0, write:0, tRead:null, tWrite:null, lastTap:0 };
@@ -2432,6 +2438,37 @@ function pcHead(r, withName) {
   return left;
 }
 const pcDay = { date: null, seq: 0, mode: 'detail' };
+function niceMax(v) { if (v <= 0) return 1000; const e = Math.pow(10, Math.floor(Math.log10(v))), f = v / e; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * e; }
+function kfmt(v) { return v >= 1000000 ? +(v / 1000000).toFixed(1) + 'M' : v >= 1000 ? +(v / 1000).toFixed(1) + 'k' : String(Math.round(v)); }
+// กราฟแท่ง SVG: data = [{label, tick, value, cap}] ; กดที่แท่งเพื่อดูรายละเอียดใต้กราฟ
+function pcBarChart(box, capEl, data, aria) {
+  box.innerHTML = ''; const NS = 'http://www.w3.org/2000/svg', W = 340, H = 176, L = 34, R = 6, T = 10, B = 24;
+  const mx = niceMax(Math.max.apply(null, data.map(d => d.value))), pw = W - L - R, ph = H - T - B, bw = pw / data.length;
+  const svg = document.createElementNS(NS, 'svg'); svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H); svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', aria);
+  svg.style.cssText = 'width:100%;height:auto;display:block;margin-top:4px;touch-action:manipulation';
+  const el = (n, a, t) => { const e = document.createElementNS(NS, n); Object.keys(a).forEach(k => e.setAttribute(k, a[k])); if (t != null) e.textContent = t; svg.appendChild(e); return e; };
+  [0, 1, 2].forEach(i => { const y = T + ph - ph * i / 2; el('line', { x1: L, x2: W - R, y1: y, y2: y, stroke: i ? '#e5e7eb' : '#9ca3af', 'stroke-width': i ? 1 : 1.2 }); el('text', { x: L - 4, y: y + 4, 'text-anchor': 'end', 'font-size': 10, fill: '#6b7280' }, kfmt(mx * i / 2)); });
+  let sel = null; const bars = [];
+  const pick = i => { bars.forEach((b, j) => b.setAttribute('fill', j === i ? '#14532d' : '#2d7a57')); capEl.textContent = data[i].cap; sel = i; };
+  data.forEach((d, i) => {
+    const h = Math.max(d.value > 0 ? 2 : 0, ph * d.value / mx), x = L + i * bw + bw * 0.14, w = bw * 0.72;
+    const b = el('rect', { x: x, y: T + ph - h, width: w, height: h, rx: Math.min(3, w / 3), fill: '#2d7a57' }); bars.push(b);
+    const hit = el('rect', { x: L + i * bw, y: T, width: bw, height: ph + B, fill: 'transparent', style: 'cursor:pointer' }); hit.addEventListener('click', () => pick(i));
+    if (d.tick) el('text', { x: L + i * bw + bw / 2, y: H - 8, 'text-anchor': 'middle', 'font-size': 10, fill: '#6b7280' }, d.label);
+  });
+  box.appendChild(svg); pick(data.length - 1);
+}
+async function loadPcCharts() {
+  try {
+    const r = await call({ action: 'pcCharts' });
+    const dd = r.daily.map((d, i) => { const p = d.date.split('-'); return { label: String(Number(p[2])), tick: i % 5 === 4 || i === 0, value: d.amount,
+      cap: p[2] + '/' + p[1] + '/' + p[0] + ' · ' + (d.count ? d.count + ' ใบ · ขอเบิก ' + fm2(d.amount) + ' ฿ · จ่ายแล้ว ' + fm2(d.paidAmount) + ' ฿' : 'ไม่มีการเบิก') }; });
+    pcBarChart($('pcChartDay'), $('pcChartDayCap'), dd, 'กราฟแท่งยอดขอเบิกเงินสดย่อยรายวัน 30 วันล่าสุด');
+    const mm = r.months.map(m => { const p = m.month.split('-'); return { label: TH_MON[Number(p[1]) - 1], tick: true, value: m.amount,
+      cap: TH_MON[Number(p[1]) - 1] + ' ' + (Number(p[0]) + 543) + ' · ' + (m.count ? m.count + ' ใบ · ขอเบิก ' + fm2(m.amount) + ' ฿ · จ่ายแล้ว ' + fm2(m.paidAmount) + ' ฿' : 'ไม่มีการเบิก') }; });
+    pcBarChart($('pcChartMon'), $('pcChartMonCap'), mm, 'กราฟแท่งยอดขอเบิกเงินสดย่อยรายเดือน 12 เดือนล่าสุด');
+  } catch (e) { if (e.code !== 'AUTH') setMsg($('pcMsg'), e.message, 'err'); }
+}
 function pcShiftDay(d, n) { const p = d.split('-').map(Number); const t = new Date(Date.UTC(p[0], p[1] - 1, p[2] + n)); return t.toISOString().slice(0, 10); }
 async function loadPcDay(date) {
   if (!date) return;
@@ -2516,7 +2553,7 @@ async function loadPc() {
       ['Q','B','C'].forEach(k => $('pcTab' + k).classList.toggle('hidden', !r.canManage));
       $('pcFin').classList.toggle('hidden', !r.canManage);
       $('pcDayD').classList.toggle('hidden', !r.canDay);
-      if (r.canDay) { pcDay.mode = r.dayMode; $('pcDayCtl').classList.toggle('hidden', r.dayMode === 'summary');
+      if (r.canDay) { $('pcChartD').classList.toggle('hidden', !r.canChart); if (r.canChart && !cached) loadPcCharts(); pcDay.mode = r.dayMode; $('pcDayCtl').classList.toggle('hidden', r.dayMode === 'summary');
         $('pcDayTitle').textContent = r.dayMode === 'summary' ? '📅 สรุปเบิกเงินสดย่อยรายวัน (30 วันล่าสุด)' : '📅 รายการเบิกรายวัน';
         if (!cached) loadPcDay(pcDay.date || r.today); }
       renderPcMine(r.mine);
