@@ -775,7 +775,21 @@ async function call(payload, pre) {
     }
     throw e;
   }
+  if (payload && !pre) afterWrite(payload.action);
   return r;
+}
+// หลังคำสั่งที่เขียนข้อมูลสำเร็จ (อนุมัติ/ขอ/เคลียร์ ฯลฯ) ให้ตัวเลขแจ้งเตือน (จุดแดงที่เมนู) อัปเดตเอง ไม่ต้องรีเฟรช
+const BADGE_KEY = { leaveDecide:'leave', otDecide:'ot', payrollDecide:'pay' };
+const NO_BADGE_REFRESH = ['login','setpin','checkin','pushRegister','pushUnregister','ping'];
+let badgeTimer = null;
+function afterWrite(action) {
+  if (!action || READ_ACTS.indexOf(action) >= 0 || NO_BADGE_REFRESH.indexOf(action) >= 0) return;
+  const k = BADGE_KEY[action];
+  if (k && state.pc && state.pc[k] > 0) {   // ตัดจุดแดงทันทีสำหรับการอนุมัติ แล้วค่อยยืนยันกับเซิร์ฟเวอร์
+    state.pc = Object.assign({}, state.pc, { [k]: state.pc[k] - 1 });
+    paintPending({ approvalsPending: k === 'leave' ? state.pc.leave : (parseInt($('leaveBadge').textContent, 10) || 0), pending: state.pc });
+  }
+  clearTimeout(badgeTimer); badgeTimer = setTimeout(refreshBadges, 300);
 }
 
 // อ่านข้อมูลแบบ "เห็นของเดิมก่อน แล้วอัปเดต": ถ้ามีแคช เรียก onData(cache) ทันที แล้วโหลดใหม่จากเซิร์ฟเวอร์เรียก onData(ใหม่) อีกครั้ง
