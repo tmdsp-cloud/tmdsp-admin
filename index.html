@@ -969,7 +969,7 @@ function applySchedule(sc) {
     const wd = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
     const up = (sc.upcoming || []).map(s => {
       const p = s.split('-').map(Number);
-      return wd[new Date(p[0], p[1] - 1, p[2]).getDay()] + ' ' + p[2] + '/' + p[1];
+      return wd[new Date(p[0], p[1] - 1, p[2]).getDay()] + ' ' + fd(s);
     });
     t = 'ตารางเข้าบริษัท: ' + (up.length ? up.join(' · ') : 'ยังไม่มีตารางงาน กรุณาติดต่อ HR') + ' · ' + sc.start + '-' + sc.end;
   } else {
@@ -1032,7 +1032,7 @@ $('empCode').addEventListener('input', () => {
 /* ---------- แจ้งเตือนบนมือถือ (FCM) ---------- */
 const push = { info:null, sdk:null, sdkP:null, reg:null, token:null, lastToken:null, on:false, checking:true };
 function pushSupported() { return 'serviceWorker' in navigator && 'Notification' in window && 'PushManager' in window; }
-function pushLabel() { const u = navigator.userAgent; return (/iPhone|iPad/.test(u) ? 'iOS' : /Android/.test(u) ? 'Android' : 'เว็บ') + ' ' + new Date().toLocaleDateString('th-TH'); }
+function pushLabel() { const u = navigator.userAgent; return (/iPhone|iPad/.test(u) ? 'iOS' : /Android/.test(u) ? 'Android' : 'เว็บ') + ' ' + fd(new Date().toISOString()); }
 function pushPaint() {
   const b = $('tbBell'); if (!b) return;
   b.classList.toggle('hidden', !(push.info && push.info.enabled));
@@ -1232,7 +1232,7 @@ function startClock() {
   const tick = () => {
     const d = new Date();
     $('clock').textContent = d.toLocaleTimeString('th-TH', { hour12:false });
-    $('dateText').textContent = d.toLocaleDateString('th-TH', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+    $('dateText').textContent = d.toLocaleDateString('th-TH', { weekday:'long' }) + ' ' + String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + String(d.getFullYear()).slice(2);
   };
   tick(); setInterval(tick, 1000);
 }
@@ -1497,7 +1497,7 @@ async function renderCalendar() {
   }
   const list = $('calList'); list.innerHTML = '';
   const t = document.createElement('div'); t.className = 'muted'; t.style.margin = '6px 0';
-  t.textContent = TH_MONTHS[m - 1] + ' ' + (y + 543);
+  t.textContent = TH_MONTHS[m - 1] + ' ' + y;
   const mh = d.holidays.filter(h => h.date.slice(0, 7) === calState.month);
   const wd = d.workDays.map(n => TH_DAYS[n % 7]).join(' ');
   t.textContent += sales ? ' · เข้างาน ' + Object.keys(sales).filter(x => x.slice(0, 7) === calState.month && !hol[x]).length + ' วันในเดือนนี้ (' + hm(d.workStart) + '–' + hm(d.workEnd) + ')' : ' · วันทำงาน: ' + wd + ' (' + hm(d.workStart) + '–' + hm(d.workEnd) + ')';
@@ -1690,7 +1690,7 @@ function thShort(s) { const p = s.split('-').map(Number); return p[2] + ' ' + TH
 // ตัวเลือกเดือนของรอบเงินเดือน/OT = "เดือนที่รอบสิ้นสุด" (26 ต.ค. – 25 พ.ย. = พฤศจิกายน) ส่วนรหัสรอบในระบบ/ชีตยังเป็นเดือนที่เริ่ม (2026-10) ไม่เปลี่ยน
 function cycEndMonth(c) { return c.end.slice(0, 7); }
 function cycStartKey(v) { if (!/^\d{4}-\d{2}$/.test(v || '')) return ''; const p = v.split('-').map(Number); return new Date(Date.UTC(p[0], p[1] - 2, 1)).toISOString().slice(0, 7); }
-function cycleText(c) { return 'รอบเงินเดือน ' + thShort(c.start) + ' – ' + thShort(c.end) + ' ' + (Number(c.end.slice(0, 4)) + 543); }
+function cycleText(c) { return 'รอบเงินเดือน ' + fd(c.start) + ' – ' + fd(c.end); }
 function tile(label, value, sub) {
   const t = document.createElement('div'); t.className = 'tile';
   const b = document.createElement('b'); b.textContent = value;
@@ -1698,6 +1698,13 @@ function tile(label, value, sub) {
   t.append(b, l);
   if (sub) { const u = document.createElement('div'); u.className = 'muted'; u.style.fontSize = '12px'; u.textContent = sub; t.appendChild(u); }
   return t;
+}
+function notInText(x, start) {
+  let t = x.name + ' (' + x.code + ')' + (x.position ? ' · ' + x.position : '');
+  if (x.overMin > 0) t += ' · เลยเวลาเริ่มงาน ' + (x.overMin >= 60 ? Math.floor(x.overMin / 60) + ' ชม. ' + (x.overMin % 60 ? (x.overMin % 60) + ' น.' : '') : x.overMin + ' น.');
+  else t += ' · ยังไม่ถึงเวลาเริ่มงาน ' + start;
+  if (x.halfLeave) t += ' · ' + x.halfLeave;
+  return t.trim();
 }
 function plist(title, items, fmt) {
   const w = document.createElement('div'); w.className = 'plist';
@@ -1722,6 +1729,7 @@ function groupSection(title, g, who, cyc, opt) {
   );
   if (!opt.noOtPct) tl.lastChild.classList.add('wide');
   sec.appendChild(tl);
+  sec.appendChild(plist('ยังไม่ลงเวลาเข้างาน (' + (g.notIn || []).length + ' คน)', g.notIn || [], x => notInText(x, g.workStart)));
   if (!opt.noLeave) sec.appendChild(plist('ลา', g.onLeave, x => x.name + ' (' + x.code + ') · ' + x.type + (x.half ? ' ' + x.half : '')));
   sec.appendChild(plist('สาย', g.late, x => x.name + ' (' + x.code + ') · สาย ' + x.minutes + ' นาที'));
   const n = document.createElement('div'); n.className = 'muted'; n.style.cssText = 'font-size:12px;margin-top:8px';
@@ -1739,7 +1747,7 @@ function meSection(d) {
     const x = b[k];
     let sv = x.remaining + ' / ' + x.entitled + ' วัน', note = x.pending ? 'รออนุมัติ ' + x.pending + ' วัน' : '';
     if (k === 'vacation' && !x.eligible) { sv = '—'; note = x.eligibleFrom ? 'ใช้ได้ตั้งแต่ ' + thDate(x.eligibleFrom) : 'ยังไม่มีวันเริ่มงาน'; }
-    tl.appendChild(tile(x.label + 'คงเหลือ ปี ' + (d.me.year + 543), sv, note));
+    tl.appendChild(tile(x.label + 'คงเหลือ ปี ' + d.me.year, sv, note));
   });
   tl.append(
     tile('เวลาทำ OT ในรอบนี้', d.me.ot.verified + ' ชม.', 'อนุมัติ ' + d.me.ot.approved + ' ชม.' + (d.me.ot.pending ? ' · รออนุมัติ ' + d.me.ot.pending : '')),
@@ -1803,6 +1811,7 @@ function mgrAttendance(g, today) {
     tile('มาสาย', g.late.length + ' คน')
   );
   sec.appendChild(tl);
+  sec.appendChild(plist('ยังไม่ลงเวลาเข้างาน (' + (g.notIn || []).length + ' คน)', g.notIn || [], x => notInText(x, g.workStart)));
   sec.appendChild(plist('ลา (ใคร/ลาอะไร)', g.onLeave, x => x.name + ' (' + x.code + ') · ' + x.type + (x.half ? ' ' + x.half : '')));
   sec.appendChild(plist('มาสาย (ใครบ้าง)', g.late, x => x.name + ' (' + x.code + ') · สาย ' + x.minutes + ' นาที'));
   return sec;
@@ -1862,7 +1871,7 @@ function drawMgrChart(r) {
     const cx = L + bw * i + bw / 2, bh = ih * (x.gross || 0) / gTop, bx = cx - bw * 0.3;
     g += '<rect x="' + bx + '" y="' + (T + ih - bh) + '" width="' + (bw * 0.6) + '" height="' + bh + '" rx="5" fill="' + (x.current ? '#2f7d5b' : '#8fc4aa') + '"><title>' + x.key + ' เงินเดือนรวม ' + fmB(x.gross) + ' ฿</title></rect>';
     if (x.gross) g += '<text x="' + cx + '" y="' + (T + ih - bh - 5) + '" text-anchor="middle" font-size="10.5" fill="#374151">' + (x.gross >= 1000 ? Math.round(x.gross / 1000) + 'k' : Math.round(x.gross)) + '</text>';
-    const mm = x.end.slice(5, 7), yy = Number(x.end.slice(0, 4)) + 543;
+    const mm = x.end.slice(5, 7), yy = Number(x.end.slice(0, 4));
     const TH = ['', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
     g += '<text x="' + cx + '" y="' + (H - 22) + '" text-anchor="middle" font-size="12" fill="#374151"' + (x.current ? ' font-weight="700"' : '') + '>' + TH[Number(mm)] + '</text>';
     g += '<text x="' + cx + '" y="' + (H - 8) + '" text-anchor="middle" font-size="10" fill="#9ca3af">' + String(yy).slice(2) + (x.current ? ' (ปัจจุบัน)' : '') + '</text>';
@@ -1936,10 +1945,9 @@ function renderDash(d) {
 
 /* ---------- ขออนุมัติลา ---------- */
 const LV_TH = { vacation:'ลาพักร้อน', sick:'ลาป่วย', personal:'ลากิจ' };
-function thDate(s) {
-  const p = String(s || '').split('-').map(Number);
-  return p.length === 3 && p[0] ? p[2] + '/' + p[1] + '/' + (p[0] + 543) : (s || '');
-}
+// วันที่ที่แสดงทั้งแอป: dd/mm/yy ปี ค.ศ. (เช่น 18/11/26) ข้อมูลภายในยังเป็น yyyy-mm-dd
+function fd(s) { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s == null ? '' : s)); return m ? m[3] + '/' + m[2] + '/' + m[1].slice(2) : String(s == null ? '' : s); }
+function thDate(s) { return fd(s); }
 function lvRange(r) {
   const half = r.half ? ' (' + r.half + ')' : '';
   return r.start === r.end ? thDate(r.start) + half : thDate(r.start) + ' - ' + thDate(r.end);
@@ -1979,7 +1987,7 @@ async function loadLeave() {
 function renderBalances(r) {
   const box = $('lvBal');
   box.innerHTML = '';
-  const h = document.createElement('div'); h.className = 'muted'; h.textContent = 'สิทธิ์การลาปี ' + (r.year + 543) + ' (คงเหลือ / สิทธิ์)';
+  const h = document.createElement('div'); h.className = 'muted'; h.textContent = 'สิทธิ์การลาปี ' + r.year + ' (คงเหลือ / สิทธิ์)';
   box.appendChild(h);
   ['vacation','sick','personal'].forEach(k => {
     const b = r.balances[k];
@@ -2450,7 +2458,7 @@ function pcHead(r, withName) {
   n.textContent = (withName ? r.name + ' · ' : '') + fm2(r.amount) + ' ฿';
   const m = document.createElement('div'); m.className = 'muted'; m.textContent = r.purpose + (r.project ? ' · โปรเจกต์ ' + r.project : '');
   left.append(n, m);
-  const t = document.createElement('div'); t.className = 'muted'; t.textContent = 'ยื่นเมื่อ ' + r.filed;
+  const t = document.createElement('div'); t.className = 'muted'; t.textContent = 'ยื่นเมื่อ ' + fd(r.filed) + ' ' + String(r.filed).slice(11, 16);
   left.appendChild(t);
   return left;
 }
@@ -2479,10 +2487,10 @@ async function loadPcCharts() {
   try {
     const r = await call({ action: 'pcCharts' });
     const dd = r.daily.map((d, i) => { const p = d.date.split('-'); return { label: String(Number(p[2])), tick: i % 5 === 4 || i === 0, value: d.amount,
-      cap: p[2] + '/' + p[1] + '/' + p[0] + ' · ' + (d.count ? d.count + ' ใบ · ขอเบิก ' + fm2(d.amount) + ' ฿ · จ่ายแล้ว ' + fm2(d.paidAmount) + ' ฿' : 'ไม่มีการเบิก') }; });
+      cap: fd(d.date || (p[0] + '-' + p[1] + '-' + p[2])) + ' · ' + (d.count ? d.count + ' ใบ · ขอเบิก ' + fm2(d.amount) + ' ฿ · จ่ายแล้ว ' + fm2(d.paidAmount) + ' ฿' : 'ไม่มีการเบิก') }; });
     pcBarChart($('pcChartDay'), $('pcChartDayCap'), dd, 'กราฟแท่งยอดขอเบิกเงินสดย่อยรายวัน 30 วันล่าสุด');
     const mm = r.months.map(m => { const p = m.month.split('-'); return { label: TH_MON[Number(p[1]) - 1], tick: true, value: m.amount,
-      cap: TH_MON[Number(p[1]) - 1] + ' ' + (Number(p[0]) + 543) + ' · ' + (m.count ? m.count + ' ใบ · ขอเบิก ' + fm2(m.amount) + ' ฿ · จ่ายแล้ว ' + fm2(m.paidAmount) + ' ฿' : 'ไม่มีการเบิก') }; });
+      cap: TH_MON[Number(p[1]) - 1] + ' ' + Number(p[0]) + ' · ' + (m.count ? m.count + ' ใบ · ขอเบิก ' + fm2(m.amount) + ' ฿ · จ่ายแล้ว ' + fm2(m.paidAmount) + ' ฿' : 'ไม่มีการเบิก') }; });
     pcBarChart($('pcChartMon'), $('pcChartMonCap'), mm, 'กราฟแท่งยอดขอเบิกเงินสดย่อยรายเดือน 12 เดือนล่าสุด');
   } catch (e) { if (e.code !== 'AUTH') setMsg($('pcMsg'), e.message, 'err'); }
 }
@@ -2660,7 +2668,7 @@ function renderPcMine(list) {
       open.onclick = () => { if (form) { form.remove(); form = null; return; } form = pcClearForm(r); more.appendChild(form); };
       more.appendChild(open);
     }
-    if (r.status === 'closed' && r.closedAt) { const o = document.createElement('div'); o.className = 'muted'; o.textContent = 'ปิดยอดเมื่อ ' + r.closedAt + (r.closeNote ? ' · ' + r.closeNote : ''); more.appendChild(o); }
+    if (r.status === 'closed' && r.closedAt) { const o = document.createElement('div'); o.className = 'muted'; o.textContent = 'ปิดยอดเมื่อ ' + fd(r.closedAt) + String(r.closedAt).slice(10, 16) + (r.closeNote ? ' · ' + r.closeNote : ''); more.appendChild(o); }
     if (r.status === 'requested') {
       const x = document.createElement('button'); x.className = 'link'; x.textContent = 'ยกเลิกใบเบิก';
       x.onclick = async () => {
@@ -2796,7 +2804,7 @@ function renderPcO(r) {
   if (!r.topups.length) { const e = document.createElement('div'); e.className = 'muted'; e.textContent = 'ยังไม่มีรายการ'; box.appendChild(e); }
   r.topups.forEach(t => {
     const d = document.createElement('div'); d.className = 'emp';
-    const l = document.createElement('div'); l.textContent = t.date + ' ' + t.time.slice(0, 5) + ' · ' + fm2(t.amount) + ' ฿ · ' + t.by;
+    const l = document.createElement('div'); l.textContent = fd(t.date) + ' ' + t.time.slice(0, 5) + ' · ' + fm2(t.amount) + ' ฿ · ' + t.by;
     d.appendChild(l);
     if (t.hasSlip) d.appendChild(pcLink('🧾 สลิป', t.id, 'topup'));
     box.appendChild(d);
