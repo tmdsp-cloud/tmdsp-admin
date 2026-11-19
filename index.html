@@ -1149,12 +1149,13 @@ function median(a) { if (!a.length) return null; const b = a.slice().sort((x, y)
 // แยกเวลาฝั่งเซิร์ฟเวอร์: ตรวจสิทธิ์ / บันทึกรูป / รอล็อก / งานในล็อก / ส่งแจ้งเตือน + เวลาอ่านชีตจริง (ที่ไม่ได้มาจากแคช)
 function perfBreak(t) {
   if (!t) return '';
-  const N = { auth:'ตรวจสิทธิ์', photo:'บันทึกรูป', lock:'รอล็อก', work:'งานในล็อก', push:'ส่งแจ้งเตือน' };
+  const N = { auth:'ตรวจสิทธิ์', photo:'บันทึกรูป', lock:'รอล็อก', work:'งานในล็อก', push:'ส่งแจ้งเตือน', calc:'คำนวณ/อื่นๆ' };
   const ph = t.ph ? Object.keys(N).filter(k => t.ph[k] != null).map(k => N[k] + ' ' + t.ph[k]) : [];
   const rd = t.rd ? Object.keys(t.rd).sort((a, b) => t.rd[b] - t.rd[a]).map(k => k + ' ' + t.rd[k] + (t.sz && t.sz[k] ? ' (' + t.sz[k] + ')' : '')) : [];
   const wr = t.wr ? Object.keys(t.wr).map(k => k + ' ' + t.wr[k]) : [];
-  if (!ph.length && !rd.length && !wr.length) return '';
-  return [ph.length ? ph.join(' · ') : '', rd.length ? 'อ่านชีต: ' + rd.join(', ') : '', wr.length ? 'เพิ่มแถว: ' + wr.join(', ') : ''].filter(Boolean).join('<br>');
+  const ca = t.ca ? Object.keys(t.ca).sort((a, b) => t.ca[b] - t.ca[a]).map(k => k + ' ' + t.ca[k]) : [];
+  if (!ph.length && !rd.length && !wr.length && !ca.length) return '';
+  return [ph.length ? ph.join(' · ') : '', rd.length ? 'อ่านชีต: ' + rd.join(', ') : '', ca.length ? 'อ่านแคช: ' + ca.join(', ') : '', wr.length ? 'เพิ่มแถว: ' + wr.join(', ') : ''].filter(Boolean).join('<br>');
 }
 function perfRender() {
   const box = $('perfBody'); if (!box) return;
