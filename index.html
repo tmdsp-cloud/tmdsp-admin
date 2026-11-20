@@ -364,6 +364,7 @@
         <option value="vacation">ลาพักร้อน</option>
         <option value="sick">ลาป่วย</option>
         <option value="personal">ลากิจ</option>
+        <option value="unpaid">ลาโดยไม่รับค่าจ้าง</option>
       </select>
       <div class="muted" style="margin-top:6px">วันที่เริ่มลา</div>
       <input type="date" id="lvStart">
@@ -1429,8 +1430,8 @@ function renderPayLine(l, box) {
   const days = x => (Math.round(x * 100) / 100) + ' วัน';
   pRow(box, l.type === 'รายวัน' ? 'ค่าแรงตามวันทำงาน' + (l.payableDays === undefined ? '' : ' (' + days(l.payableDays) + ')') : 'เงินเดือน', m(l.basePay));
   if (l.prorateDed) pRow(box, 'หักตามสัดส่วนวันที่ทำงานจริง (เริ่มงาน/สิ้นสุดสัญญากลางรอบ)', '-' + m(l.prorateDed), 'minus');
-  if (l.type !== 'รายวัน' && (l.absentDed || l.absentDays)) pRow(box, 'หักขาดงาน (' + days(l.absentDays) + ')', '-' + m(l.absentDed), 'minus');
-  if (l.type === 'รายวัน' && l.absentDays) pRow(box, 'ขาดงาน (ไม่ได้ค่าจ้าง)', days(l.absentDays));
+  if (l.type !== 'รายวัน' && (l.absentDed || l.absentDays)) pRow(box, (l.unpaidDays ? 'หักขาดงาน/ลาไม่รับค่าจ้าง ' + days(l.unpaidDays) + ' (รวม ' : 'หักขาดงาน (') + days(l.absentDays) + ')', '-' + m(l.absentDed), 'minus');
+  if (l.type === 'รายวัน' && l.absentDays) pRow(box, (l.unpaidDays ? 'ขาดงาน/ลาไม่รับค่าจ้าง (ไม่ได้ค่าจ้าง)' : 'ขาดงาน (ไม่ได้ค่าจ้าง)'), days(l.absentDays));
   if (l.otAmount || l.otHours) pRow(box, 'ค่า OT (' + l.otHours + ' ชม.)', '+' + m(l.otAmount), 'plus');
   if (l.commission) pRow(box, 'ค่าคอมมิชชั่น', '+' + m(l.commission), 'plus');
   if (l.diligence) pRow(box, 'เบี้ยขยัน (ติดต่อกัน ' + l.dilStreak + ' เดือน)', '+' + m(l.diligence), 'plus');
@@ -1675,9 +1676,9 @@ $('payCsv').onclick = () => {
   const r = state.payRun;
   if (!r || !r.rows.length) return setMsg($('payRunMsg'), 'ไม่มีข้อมูลให้ดาวน์โหลด', 'err');
   const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
-  const head = ['รหัส','ชื่อ','ประเภท','เงินเดือน/ค่าแรง','หักตามสัดส่วนวัน','วันขาด','หักขาดงาน','นาทีสาย','หักมาสาย','นาทีออกก่อน','หักออกก่อน','ค่า OT','ค่าคอม','รายได้รวม','ประกันสังคม','หัก ณ ที่จ่าย','หักอื่นๆ','เงินได้สุทธิ','หมายเหตุ'];
+  const head = ['รหัส','ชื่อ','ประเภท','เงินเดือน/ค่าแรง','หักตามสัดส่วนวัน','วันขาด','(ในนั้นลาไม่รับค่าจ้าง)','หักขาดงาน','นาทีสาย','หักมาสาย','นาทีออกก่อน','หักออกก่อน','ค่า OT','ค่าคอม','รายได้รวม','ประกันสังคม','หัก ณ ที่จ่าย','หักอื่นๆ','เงินได้สุทธิ','หมายเหตุ'];
   const lines = [head.map(q).join(',')];
-  r.rows.forEach(x => lines.push([x.code, x.name, x.type, x.basePay, x.prorateDed, x.absentDays, x.absentDed, x.lateMins, x.lateDed, x.earlyMins, x.earlyDed, x.otAmount, x.commission, x.gross, x.ss, x.wht || 0, x.otherDed, x.net, x.remark].map(q).join(',')));
+  r.rows.forEach(x => lines.push([x.code, x.name, x.type, x.basePay, x.prorateDed, x.absentDays, x.unpaidDays || 0, x.absentDed, x.lateMins, x.lateDed, x.earlyMins, x.earlyDed, x.otAmount, x.commission, x.gross, x.ss, x.wht || 0, x.otherDed, x.net, x.remark].map(q).join(',')));
   const blob = new Blob(['\ufeff' + lines.join('\r\n')], { type:'text/csv;charset=utf-8' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
   a.download = 'payroll-' + r.cycle.start + '_' + r.cycle.end + '.csv';
@@ -1945,7 +1946,7 @@ function renderDash(d) {
 }
 
 /* ---------- ขออนุมัติลา ---------- */
-const LV_TH = { vacation:'ลาพักร้อน', sick:'ลาป่วย', personal:'ลากิจ' };
+const LV_TH = { vacation:'ลาพักร้อน', sick:'ลาป่วย', personal:'ลากิจ', unpaid:'ลาโดยไม่รับค่าจ้าง' };
 // วันที่ที่แสดงทั้งแอป: dd/mm/yy ปี ค.ศ. (เช่น 18/11/26) ข้อมูลภายในยังเป็น yyyy-mm-dd
 function fd(s) { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s == null ? '' : s)); return m ? m[3] + '/' + m[2] + '/' + m[1].slice(2) : String(s == null ? '' : s); }
 function thDate(s) { return fd(s); }
@@ -2001,6 +2002,13 @@ function renderBalances(r) {
     c.textContent = t;
     row.append(a, c); box.appendChild(row);
   });
+  const u = r.balances.unpaid;
+  if (u && (u.used || u.pending)) {
+    const row = document.createElement('div'); row.className = 'row';
+    const a = document.createElement('span'); a.textContent = u.label;
+    const c = document.createElement('span'); c.textContent = 'ใช้ไป ' + u.used + ' วัน' + (u.pending ? ' (รออนุมัติ ' + u.pending + ')' : '');
+    row.append(a, c); box.appendChild(row);
+  }
 }
 
 function renderMine(list) {
