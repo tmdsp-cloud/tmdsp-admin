@@ -146,6 +146,15 @@
   .tile { background:#f1f5f3; }
   .tile b { color:var(--brand); }
   .dsec h2 { color:var(--text); }
+  .tile.tap { cursor:pointer; border:2px solid transparent; }
+  .tile.tap.on { border-color:var(--brand); background:var(--brand2); }
+  .tile.tap.warn b { color:#c2410c; }
+  .msum-list { margin-top:10px; font-size:14px; }
+  .msum-list .it { display:flex; gap:10px; padding:8px 0; border-bottom:1px solid var(--line); }
+  .msum-list .it:last-child { border:0; }
+  .msum-list .dt { font-weight:700; min-width:92px; white-space:nowrap; }
+  .msum-list .st { font-size:12px; padding:1px 8px; border-radius:999px; background:#fef3c7; color:#92400e; margin-left:6px; white-space:nowrap; }
+  .msum-list .st.ok { background:#dcfce7; color:#166534; }
   button.gray { background:#eef1f4; color:var(--text); }
   button, .btn { border-radius:16px; }
   button.link { color:var(--muted); }
@@ -266,6 +275,7 @@
   <button class="nv" data-nav="pc" id="navPc"><i>💰</i>เบิกเงินสดย่อย<span class="dot hidden" id="navDotPc"></span></button>
   <button class="nv" data-nav="pay"><i>💵</i>เงินเดือน<span class="dot hidden" id="navDotPay"></span></button>
   <button class="nv" data-nav="cal"><i>📅</i>ปฏิทิน</button>
+  <button class="nv" data-nav="crm"><i>🤝</i>CRM<small style="margin-left:auto;opacity:.6">เปิดหน้าใหม่ ↗</small></button>
   <button class="nv" data-nav="manage" id="navManage"><i>👥</i>จัดการพนักงาน</button>
   <div class="sp"></div>
   <button class="nv perf" data-nav="perf"><i>⚡</i>ตรวจความเร็ว</button>
@@ -683,7 +693,7 @@ const perfLog = [];
 // ---------- ตัวแสดง "กำลังประมวลผล" ----------
 // คำสั่งอ่าน (ที่ผู้ใช้เพิ่งแตะ): แถบเลื่อนด้านบน + ป้าย "กำลังโหลด…" ; คำสั่งบันทึก: ฉากบังพร้อม "กำลังบันทึก…" กันกดซ้ำ
 // ปุ่มที่กดจะหมุนอยู่ในปุ่มจนเสร็จ ; คำขอเบื้องหลัง (โหลดล่วงหน้า/อัปเดตเลข) ไม่แสดงอะไร เพื่อไม่ให้กะพริบ
-const READ_ACTS = ['ping','calendar','status','dashboard','listEmployees','leaveOverview','otOverview','otReport','payrollMine','payrollRun','mgrHistory','expOverview','expPhoto','pcOverview','pcDay','pcCharts','pcPhoto'];
+const READ_ACTS = ['ping','calendar','status','dashboard','listEmployees','leaveOverview','otOverview','otReport','payrollMine','payrollRun','mgrHistory','expOverview','expPhoto','pcOverview','pcDay','pcCharts','pcPhoto','mySummary'];
 const SILENT_ACTS = ['ping','pushRegister','pushUnregister','dashboard']; // dashboard โหลดคู่ขนานเป็นส่วนเสริมของหน้าหลัก ไม่ต้องบัง
 const BUSY_TEXT = { login:'กำลังเข้าสู่ระบบ…', setpin:'กำลังตั้ง PIN…', checkin:'กำลังลงเวลา…' };
 const busy = { read:0, write:0, tRead:null, tWrite:null, lastTap:0 };
@@ -892,7 +902,7 @@ async function loadStatus() {
   const r = await api({ action:'status', token:store.get('token') });
   if (!r.ok) { const e = new Error(r.error); e.code = r.code; throw e; }
   state.branch = r.branch;
-  state.me = r.employee;
+  state.me = r.employee; state.msum = null; state.msumAt = 0;
   $('empName').textContent = r.employee.name;
   $('empCode2').textContent = 'รหัส ' + r.employee.code + (r.employee.role !== 'employee' ? ' · ' + ROLE_LABEL[r.employee.role] : '');
   applyViewNav();
@@ -1216,14 +1226,22 @@ document.querySelectorAll('#navbar .nv').forEach(b => b.onclick = () => {
   sbClose();
   if (k === 'logout') { $('logoutBtn').click(); return; }
   if (k === 'perf') { perfOpen(); return; }
+  if (k === 'crm') { openCrm(); return; }
   if (k === 'home') { loadStatus().catch(() => show('mainView')); }
   else if (k === 'cal') openCalendar();
   else $({ leave:'leaveBtn', ot:'otBtn', exp:'expBtn', pc:'pcBtn', pay:'payBtn', manage:'manageBtn' }[k]).click();
 });
+// CRM เป็นเว็บแอปแยก (Apps Script โดเมน tmdsp.co.th) ล็อกอินด้วยบัญชี Google บริษัท เปิดในเบราว์เซอร์ ไม่ฝังในแอป
+const CRM_URL = 'https://script.google.com/a/macros/tmdsp.co.th/s/AKfycbzHVL-kA3pt6o1LexIu9dxFB94r1GZEJNY87zILTf8YtxmmADaHsGWp6_xz_pVyJ0u5NA/exec';
+function openCrm() {
+  const w = window.open(CRM_URL, '_blank'); // ไม่ใส่ noopener ในตัวเลือก (จะคืน null ทำให้แยกไม่ออกว่าถูกบล็อก) แล้วตัดการเชื่อมกลับแทน
+  if (w) { try { w.opener = null; } catch (e) {} }
+  else location.href = CRM_URL; // เบราว์เซอร์บล็อกหน้าต่างใหม่: เปิดในหน้าเดิมแทน (กดย้อนกลับเพื่อกลับมาแอป)
+}
 $('logoutBtn').onclick = () => {
   if (push.token) { api({ action:'pushUnregister', token:store.get('token'), fcmToken:push.token }).catch(() => {}); push.token = null; push.on = false; }
   store.del('token'); clearCaches(); state.prefetched = false;
-  state.photo = null; state.me = null;
+  state.photo = null; state.me = null; state.msum = null; state.msumAt = 0;
   resetPhoto();
   setMsg($('actionMsg'), '');
   show('loginView');
@@ -1768,6 +1786,94 @@ function meSection(d) {
   sec.appendChild(tl);
   return sec;
 }
+/* ---------- สรุปการมาทำงานของฉัน (ขาด / ลา / สาย / ไม่รูดบัตร / OT) ตามรอบเงินเดือน ---------- */
+const MS_WD = ['อา','จ','อ','พ','พฤ','ศ','ส'];
+function msDay(s) { const p = String(s).split('-').map(Number); return MS_WD[new Date(p[0], p[1] - 1, p[2]).getDay()] + ' ' + fd(s); }
+function mySummaryCard() {
+  const sec = document.createElement('div'); sec.className = 'card dsec'; sec.id = 'msumCard';
+  const h = document.createElement('h2'); h.textContent = 'สรุปการมาทำงาน'; sec.appendChild(h);
+  const body = document.createElement('div'); body.id = 'msumBody';
+  body.innerHTML = '<div class="muted" style="margin-top:8px">กำลังโหลด...</div>';
+  sec.appendChild(body);
+  return sec;
+}
+async function loadMySummary(cycle) {
+  const body = $('msumBody'); if (!body) return;
+  const key = 'msum_' + (state.me ? state.me.code : '') + '_' + (cycle || 'cur');
+  let shown = false;
+  if (!body.dataset.ok && !state.msum) { try { const c = JSON.parse(store.get(key) || 'null'); if (c) { renderMySummary(c); shown = true; } } catch (e) {} }
+  try {
+    const d = await call(cycle ? { action:'mySummary', cycle: cycle } : { action:'mySummary' });
+    try { store.set(key, JSON.stringify(d)); } catch (e) {}
+    state.msum = d;
+    renderMySummary(d);
+  } catch (e) {
+    if (e.code === 'AUTH' || shown) return;
+    body.innerHTML = '';
+    const m = document.createElement('div'); m.className = 'muted'; m.style.marginTop = '8px';
+    m.textContent = 'โหลดสรุปไม่ได้: ' + e.message + ' (หากเพิ่งอัปเดต ตรวจว่า Deploy Apps Script เวอร์ชันใหม่แล้ว)';
+    body.appendChild(m);
+  }
+}
+function renderMySummary(d) {
+  const body = $('msumBody'), card = $('msumCard'); if (!body) return;
+  if (d.noClock) { card.remove(); return; }
+  body.dataset.ok = '1';
+  const open = state.msumOpen || '';
+  body.innerHTML = '';
+  // เลือกรอบ (แสดงตามเดือนที่รอบสิ้นสุด)
+  const sel = document.createElement('select'); sel.style.marginTop = '8px';
+  (d.cycles || []).forEach((c, i) => {
+    const o = document.createElement('option'); o.value = c.key;
+    o.textContent = (i === 0 ? 'รอบปัจจุบัน ' : '') + fd(c.start) + ' – ' + fd(c.end);
+    if (c.key === d.cycle.key) o.selected = true; sel.appendChild(o);
+  });
+  sel.onchange = () => { state.msumOpen = ''; body.querySelectorAll('.tile').forEach(t => t.style.opacity = '.5'); loadMySummary(sel.value === (d.cycles[0] || {}).key ? '' : sel.value); };
+  body.appendChild(sel);
+  const t = d.totals || {};
+  const note = document.createElement('div'); note.className = 'muted'; note.style.cssText = 'font-size:12px;margin-top:6px';
+  note.textContent = d.asOf ? (d.asOf < d.cycle.end ? 'นับขาด/ไม่รูดบัตรถึง ' + fd(d.asOf) + ' (วันนี้ยังไม่จบวัน) · ' : '') + 'แตะหัวข้อเพื่อดูรายวัน' : 'รอบนี้ยังไม่มีวันที่ผ่านมา · แตะหัวข้อเพื่อดูรายวัน';
+  body.appendChild(note);
+  const tl = document.createElement('div'); tl.className = 'tiles';
+  const list = document.createElement('div'); list.className = 'msum-list';
+  const defs = [
+    ['absent', 'ขาดงาน', t.absentDays + ' วัน', [t.absentDays - t.noPunchDays > 0 ? 'ไม่ลงเวลา ' + (Math.round((t.absentDays - t.noPunchDays) * 100) / 100) + ' วัน' : '', t.noPunchCount ? 'ไม่รูดบัตร ' + t.noPunchDays + ' วัน' : ''].filter(Boolean).join(' · '), t.absentDays > 0],
+    ['leave', 'ลา (อนุมัติแล้ว)', t.leaveDays + ' วัน', t.leavePending ? 'รออนุมัติ ' + t.leavePending + ' วัน' : '', false],
+    ['late', 'สาย / ออกก่อน', (t.lateCount + t.earlyCount) + ' ครั้ง', [t.lateCount ? 'สาย ' + t.lateMins + ' นาที' : '', t.earlyCount ? 'ออกก่อน ' + t.earlyCount + ' ครั้ง ' + t.earlyMins + ' นาที' : ''].filter(Boolean).join(' · '), t.lateCount + t.earlyCount > 0],
+    ['nopunch', 'ไม่รูดบัตร', t.noPunchCount + ' ครั้ง', t.noPunchCount ? 'นับเป็นขาด ' + t.noPunchDays + ' วัน' : '', t.noPunchCount > 0],
+    ['ot', 'OT ทำจริง', t.otHours + ' ชม.', [t.otCount ? t.otCount + ' ครั้ง' : '', t.otPending ? 'รออนุมัติ ' + t.otPending + ' ชม.' : ''].filter(Boolean).join(' · '), false]
+  ];
+  const draw = k => {
+    list.innerHTML = '';
+    tl.querySelectorAll('.tile').forEach(x => x.classList.toggle('on', x.dataset.k === k));
+    if (!k) return;
+    const rows = [];
+    const add = (dt, text, st, ok) => rows.push([dt, text, st, ok]);
+    if (k === 'absent') d.items.filter(x => x.kind === 'absent' || x.kind === 'nopunch').forEach(x => add(msDay(x.date), x.text));
+    if (k === 'nopunch') d.items.filter(x => x.kind === 'nopunch').forEach(x => add(msDay(x.date), x.text));
+    if (k === 'late') d.items.filter(x => x.kind === 'late' || x.kind === 'early').forEach(x => add(msDay(x.date), x.text));
+    if (k === 'leave') d.leave.forEach(x => add(x.start === x.end ? msDay(x.start) : fd(x.start) + ' – ' + fd(x.end),
+      x.typeLabel + (x.half ? ' (' + x.half + ')' : '') + ' · ' + x.days + ' วัน' + (x.reason ? ' · ' + x.reason : ''), x.statusLabel, x.status === 'approved'));
+    if (k === 'ot') d.ot.forEach(x => add(msDay(x.date), x.start + '–' + x.end + ' · ขอ ' + x.hours + ' ชม.' +
+      (x.status === 'approved' ? ' · ทำจริง ' + x.actualHours + ' ชม.' + (x.checkText && !x.saved ? ' (' + x.checkText + ')' : '') : ''), x.statusLabel, x.status === 'approved'));
+    if (!rows.length) { const e = document.createElement('div'); e.className = 'muted'; e.textContent = '— ไม่มีในรอบนี้ —'; list.appendChild(e); return; }
+    rows.forEach(rw => {
+      const it = document.createElement('div'); it.className = 'it';
+      const a = document.createElement('div'); a.className = 'dt'; a.textContent = rw[0];
+      const b = document.createElement('div'); b.textContent = rw[1];
+      if (rw[2]) { const s = document.createElement('span'); s.className = 'st' + (rw[3] ? ' ok' : ''); s.textContent = rw[2]; b.appendChild(s); }
+      it.append(a, b); list.appendChild(it);
+    });
+  };
+  defs.forEach(x => {
+    const tt = tile(x[1], x[2], x[3]); tt.classList.add('tap'); if (x[4]) tt.classList.add('warn'); tt.dataset.k = x[0];
+    if (x[0] === 'ot') tt.classList.add('wide');
+    tt.onclick = () => { const k = state.msumOpen === x[0] ? '' : x[0]; state.msumOpen = k; draw(k); };
+    tl.appendChild(tt);
+  });
+  body.append(tl, list);
+  if (open) draw(open);
+}
 const VIEW_LABEL = { manager:'ผู้จัดการ', hr:'HR', employee:'พนักงาน' };
 function isApprover() { const m = state.me || {}; return m.role === 'admin' || m.position === 'Manager (ผู้ดูแลระบบ)'; }
 function viewMode() {
@@ -1937,10 +2043,18 @@ function renderDash(d) {
       if (d.finance) box.appendChild(financeSection(d.finance, d.cycle));
       if (d.org) box.appendChild(groupSection('ภาพรวมบริษัท', d.org, 'พนักงาน', d.cycle));
       if (d.team) box.appendChild(groupSection('ทีมของฉัน', d.team, 'ลูกน้อง', d.cycle));
+      box.appendChild(mySummaryCard());
       box.appendChild(meSection(d));
     } else {
       if (d.team) box.appendChild(groupSection('ทีมของฉัน', d.team, 'ลูกน้อง', d.cycle));
+      box.appendChild(mySummaryCard());
       box.appendChild(meSection(d));
+    }
+    if (v === 'manager' && (state.me || {}).position !== 'Manager (ผู้ดูแลระบบ)') { const c = mySummaryCard(); c.classList.add('span2'); box.appendChild(c); }
+    if ($('msumBody')) {
+      // renderDash ถูกเรียกซ้ำ (ของเก่าในเครื่อง แล้วของใหม่) ใช้ข้อมูลที่มีอยู่ก่อน และโหลดใหม่ไม่ถี่กว่า 20 วินาที
+      if (state.msum) renderMySummary(state.msum);
+      if (!state.msumAt || Date.now() - state.msumAt > 20000) { state.msumAt = Date.now(); loadMySummary(state.msum && state.msum.cycle.key !== (state.msum.cycles[0] || {}).key ? state.msum.cycle.key : ''); }
     }
   }
 }
