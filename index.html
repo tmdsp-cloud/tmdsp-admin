@@ -165,6 +165,13 @@
   .rep-t tr.k-warn td.s { color:#c2410c; }
   .rep-t tr.k-leave td.s { color:#2563eb; }
   .rep-t tr.k-today td.s { color:#7c3aed; }
+  .mg-cap { font-size:13px; color:var(--muted); margin-top:4px; min-height:18px; }
+  .mg-leg { display:flex; flex-wrap:wrap; gap:12px; font-size:12px; color:var(--muted); margin-top:6px; }
+  .mg-leg i { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:4px; vertical-align:-1px; }
+  .mg-leg i.ln { height:3px; border-radius:2px; vertical-align:2px; }
+  .mg-row { display:flex; gap:8px; margin-top:8px; }
+  .mg-row > * { flex:1; min-width:0; margin-top:0 !important; }
+  .mg-row button { flex:0 0 46px; }
   .rep-link { display:block; margin-top:10px; text-align:center; font-size:14px; color:var(--brand); background:none; border:0; width:100%; padding:6px; cursor:pointer; }
   button.gray { background:#eef1f4; color:var(--text); }
   button, .btn { border-radius:16px; }
@@ -720,7 +727,7 @@ const perfLog = [];
 // ---------- ตัวแสดง "กำลังประมวลผล" ----------
 // คำสั่งอ่าน (ที่ผู้ใช้เพิ่งแตะ): แถบเลื่อนด้านบน + ป้าย "กำลังโหลด…" ; คำสั่งบันทึก: ฉากบังพร้อม "กำลังบันทึก…" กันกดซ้ำ
 // ปุ่มที่กดจะหมุนอยู่ในปุ่มจนเสร็จ ; คำขอเบื้องหลัง (โหลดล่วงหน้า/อัปเดตเลข) ไม่แสดงอะไร เพื่อไม่ให้กะพริบ
-const READ_ACTS = ['ping','calendar','status','dashboard','listEmployees','leaveOverview','otOverview','otReport','payrollMine','payrollRun','mgrHistory','expOverview','expPhoto','pcOverview','pcDay','pcCharts','pcPhoto','mySummary'];
+const READ_ACTS = ['ping','calendar','status','dashboard','listEmployees','leaveOverview','otOverview','otReport','payrollMine','payrollRun','mgrHistory','expOverview','expPhoto','pcOverview','pcDay','pcCharts','pcPhoto','mySummary','mgrDash','mgrPerson'];
 const SILENT_ACTS = ['ping','pushRegister','pushUnregister','dashboard']; // dashboard โหลดคู่ขนานเป็นส่วนเสริมของหน้าหลัก ไม่ต้องบัง
 const BUSY_TEXT = { login:'กำลังเข้าสู่ระบบ…', setpin:'กำลังตั้ง PIN…', checkin:'กำลังลงเวลา…' };
 const busy = { read:0, write:0, tRead:null, tWrite:null, lastTap:0 };
@@ -929,7 +936,7 @@ async function loadStatus() {
   const r = await api({ action:'status', token:store.get('token') });
   if (!r.ok) { const e = new Error(r.error); e.code = r.code; throw e; }
   state.branch = r.branch;
-  state.me = r.employee; state.msum = null; state.msumAt = 0;
+  state.me = r.employee; state.msum = null; state.msumAt = 0; mgReset();
   $('empName').textContent = r.employee.name;
   $('empCode2').textContent = 'รหัส ' + r.employee.code + (r.employee.role !== 'employee' ? ' · ' + ROLE_LABEL[r.employee.role] : '');
   applyViewNav();
@@ -1269,7 +1276,7 @@ function openCrm() {
 $('logoutBtn').onclick = () => {
   if (push.token) { api({ action:'pushUnregister', token:store.get('token'), fcmToken:push.token }).catch(() => {}); push.token = null; push.on = false; }
   store.del('token'); clearCaches(); state.prefetched = false;
-  state.photo = null; state.me = null; state.msum = null; state.msumAt = 0;
+  state.photo = null; state.me = null; state.msum = null; state.msumAt = 0; mgReset();
   resetPhoto();
   setMsg($('actionMsg'), '');
   show('loginView');
@@ -1968,6 +1975,206 @@ function renderReport(d) {
     body.querySelectorAll('td').forEach(td => { td.style.whiteSpace = td.className === 'd' || td.className === 't' ? 'nowrap' : 'pre-line'; });
   }
 }
+/* ---------- หน้าหลักผู้จัดการ ---------- */
+const mg = {};
+function mgReset() { Object.keys(mg).forEach(k => delete mg[k]); Object.assign(mg, { date: '', year: 0, open: '', seq: 0, data: null, person: '', pcycle: '', pseq: 0, pdays: false, pdata: null, at: 0, popen: '' }); }
+mgReset();
+function mgCard(title, id) { const c = document.createElement('div'); c.className = 'card dsec'; if (id) c.id = id; const h = document.createElement('h2'); h.textContent = title; c.appendChild(h); return c; }
+function mgEl(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+function mg0(v) { return Math.round(Number(v) || 0).toLocaleString('en-US'); }
+function mgPct(v) { return v == null ? '–' : (Math.round(v * 10) / 10) + '%'; }
+function mgBuild(box) {
+  const c1 = mgCard('รายงานรายวัน', 'mgDaily');
+  const row = mgEl('div', 'mg-row');
+  const prev = mgEl('button', 'gray', '‹'), next = mgEl('button', 'gray', '›'), di = document.createElement('input');
+  di.type = 'date'; di.id = 'mgDate'; prev.setAttribute('aria-label', 'วันก่อน'); next.setAttribute('aria-label', 'วันถัดไป');
+  row.append(prev, di, next); c1.appendChild(row);
+  c1.appendChild(mgEl('div', '', '')).id = 'mgDailyBody';
+  const c2 = mgCard('รอบเดือนปัจจุบัน', 'mgCycle'); c2.appendChild(mgEl('div', '', '')).id = 'mgCycleBody';
+  const c3 = mgCard('รายงาน 12 เดือน', 'mgYear'); c3.classList.add('span2');
+  const ys = document.createElement('select'); ys.id = 'mgYearSel'; ys.style.marginTop = '8px'; c3.appendChild(ys);
+  c3.appendChild(mgEl('div', '', '')).id = 'mgYearBody';
+  const c4 = mgCard('รายงานรายบุคคล', 'mgPerson'); c4.classList.add('span2');
+  const pr = mgEl('div', 'mg-row'); const ps = document.createElement('select'); ps.id = 'mgPersonSel'; const pc = document.createElement('select'); pc.id = 'mgPersonCyc';
+  pr.append(ps, pc); pr.querySelectorAll('select').forEach(s => { s.style.flex = '1'; }); c4.appendChild(pr);
+  c4.appendChild(mgEl('div', '', '')).id = 'mgPersonBody';
+  box.append(c1, c2, c3, c4);
+  const shift = n => { const v = di.value || (mg.data && mg.data.today); if (!v) return; const t = pcShiftDay(v, n); if (mg.data && (t > mg.data.today || t < mg.data.minDate)) return; loadMgr(t, mg.year); };
+  prev.onclick = () => shift(-1); next.onclick = () => shift(1);
+  di.onchange = () => { if (di.value) loadMgr(di.value, mg.year); };
+  ys.onchange = () => loadMgr(mg.date, Number(ys.value));
+  ps.onchange = () => { mg.person = ps.value; loadMgrPerson(); };
+  pc.onchange = () => { mg.pcycle = pc.value; loadMgrPerson(); };
+  let cached = mg.data; if (!cached) { try { cached = JSON.parse(store.get('mgdash_' + (state.me ? state.me.code : '')) || 'null'); } catch (e) {} }
+  if (cached) renderMgr(cached);
+  if (mg.pdata) renderMgrPerson(mg.pdata);
+  // renderDash ถูกเรียกซ้ำ (ของในเครื่องแล้วของใหม่) โหลดใหม่ไม่ถี่กว่า 20 วินาที
+  if (!mg.at || Date.now() - mg.at > 20000 || !mg.data) { mg.at = Date.now(); loadMgr(mg.date, mg.year); }
+}
+async function loadMgr(date, year) {
+  const my = ++mg.seq;
+  const q = { action: 'mgrDash' }; if (date) q.date = date; if (year) q.year = year;
+  if ($('mgDailyBody') && mg.data && date && date !== mg.data.daily.date) $('mgDailyBody').style.opacity = '.5';
+  try {
+    const d = await call(q);
+    if (my !== mg.seq) return;
+    mg.date = d.daily.date === d.today ? '' : d.daily.date; mg.year = d.year.year;
+    if (!date && !year) { try { store.set('mgdash_' + (state.me ? state.me.code : ''), JSON.stringify(d)); } catch (e) {} }
+    renderMgr(d);
+  } catch (e) {
+    if (e.code === 'AUTH' || !$('mgDailyBody')) return;
+    $('mgDailyBody').style.opacity = '';
+    if (!mg.data) { $('mgDailyBody').innerHTML = ''; $('mgDailyBody').appendChild(mgEl('div', 'muted', 'โหลดไม่ได้: ' + e.message + ' (หากเพิ่งอัปเดต ตรวจว่า Deploy Apps Script เวอร์ชันใหม่แล้ว)')); }
+  }
+}
+function mgTiles(defs, openKey, onPick) {
+  const tl = mgEl('div', 'tiles'), list = mgEl('div', 'msum-list');
+  const draw = k => { tl.querySelectorAll('.tile').forEach(x => x.classList.toggle('on', x.dataset.k === k)); list.innerHTML = ''; const f = defs.filter(x => x.k === k)[0]; if (f && f.list) f.list(list); };
+  defs.forEach(x => {
+    const t = tile(x.label, x.value, x.sub || ''); t.dataset.k = x.k;
+    if (x.wide) t.classList.add('wide');
+    if (x.list) { t.classList.add('tap'); if (x.warn) t.classList.add('warn'); t.onclick = () => { const k = onPick() === x.k ? '' : x.k; onPick(k); draw(k); }; }
+    tl.appendChild(t);
+  });
+  if (openKey) draw(openKey);
+  return [tl, list];
+}
+function mgPeople(list, arr, empty) {
+  if (!arr.length) { list.appendChild(mgEl('div', 'muted', empty)); return; }
+  arr.forEach(x => { const it = mgEl('div', 'it'); it.append(mgEl('div', 'dt', x.name), mgEl('div', '', x.text)); list.appendChild(it); });
+}
+function renderMgr(d) {
+  mg.data = d; if (!$('mgDailyBody')) return;
+  // รายวัน
+  const dy = d.daily, b1 = $('mgDailyBody'); b1.innerHTML = ''; b1.style.opacity = '';
+  const di = $('mgDate'); di.value = dy.date; di.max = d.today; di.min = d.minDate;
+  b1.appendChild(mgEl('div', 'muted', msDay(dy.date) + (dy.isToday ? ' (วันนี้ ข้อมูลถึงตอนนี้)' : '') + (dy.holiday ? ' · วันหยุดนักขัตฤกษ์' : '')));
+  if (!dy.scheduled) b1.appendChild(mgEl('div', 'muted', 'ไม่มีพนักงานที่มีตารางทำงานในวันนี้'));
+  else {
+    const pick = k => { if (k !== undefined) mg.open = k; return mg.open; };
+    const [tl, list] = mgTiles([
+      { k: 'absent', label: dy.isToday ? 'ขาด / ยังไม่เข้างาน' : 'ขาดงาน', value: dy.absent.length + ' คน', warn: dy.absent.length > 0, list: l => mgPeople(l, dy.absent, '— ไม่มี —') },
+      { k: 'leave', label: 'ลา', value: dy.leave.length + ' คน', list: l => mgPeople(l, dy.leave, '— ไม่มี —') },
+      { k: 'late', label: 'มาสาย', value: dy.late.length + ' คน', warn: dy.late.length > 0, list: l => mgPeople(l, dy.late, '— ไม่มี —') },
+      { k: 'att', label: '%Attendance', value: mgPct(dy.pct), sub: 'มา ' + dy.present + ' / ' + dy.scheduled + ' คนที่มีตารางทำงาน' }
+    ], mg.open, pick);
+    b1.append(tl, list);
+  }
+  // รอบเดือนปัจจุบัน
+  const c = d.cycle, b2 = $('mgCycleBody'); b2.innerHTML = '';
+  $('mgCycle').querySelector('h2').textContent = 'รอบเดือนปัจจุบัน ' + fd(c.start) + ' – ' + fd(c.end);
+  b2.appendChild(mgEl('div', 'muted', c.asOf ? 'ข้อมูลถึง ' + fd(c.asOf) + (c.official ? ' · ตัวเลขเงินเดือนที่อนุมัติแล้ว' : ' · ตัวเลขสด ยังไม่เป็นทางการ') : 'รอบเพิ่งเริ่ม ยังไม่มีวันที่ผ่านมา'));
+  const [t2] = mgTiles([
+    { k: 'b', label: 'เงินเดือนพื้นฐาน', value: mg0(c.base) + ' ฿', sub: c.manpower + ' คน', wide: true },
+    { k: 'h', label: 'OT รวม', value: c.otHours + ' ชม.' },
+    { k: 'a', label: 'ค่า OT รวม', value: mg0(c.otAmount) + ' ฿' },
+    { k: 'p', label: '%OT / Salary', value: mgPct(c.otPct) },
+    { k: 't', label: '%Attendance', value: mgPct(c.attPct), sub: c.schedDays ? 'มา ' + c.attDays + ' / ' + c.schedDays + ' วัน-คน' : '' }
+  ], '', () => '');
+  b2.appendChild(t2);
+  // 12 เดือน
+  const ys = $('mgYearSel'), thisY = Number(d.today.slice(0, 4)); ys.innerHTML = '';
+  for (let y = thisY; y >= thisY - 2; y--) { const o = document.createElement('option'); o.value = y; o.textContent = 'ปี ' + y; if (y === d.year.year) o.selected = true; ys.appendChild(o); }
+  const b3 = $('mgYearBody'); b3.innerHTML = '';
+  const MN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const ms = d.year.months;
+  const capOf = m => MN[m.month - 1] + ' ' + d.year.year + ' · รอบ ' + fd(m.start) + '–' + fd(m.end);
+  b3.appendChild(mgEl('div', '', '')).innerHTML = '<div style="font-weight:700;margin-top:10px">เงินเดือนพื้นฐาน + OT และ %OT/Salary</div>';
+  const g1 = mgEl('div'), cp1 = mgEl('div', 'mg-cap'); b3.append(g1, cp1);
+  b3.appendChild(mgLegend([['#2d7a57', 'เงินเดือนพื้นฐาน'], ['#f59e0b', 'OT'], ['#2563eb', '%OT/Salary', true]]));
+  mgCombo(g1, cp1, ms.map(m => ({ label: MN[m.month - 1], a: m.hasData ? m.base : 0, b: m.hasData ? m.otAmount : 0, pct: m.hasData ? m.otPct : null, none: !m.hasData,
+    cap: capOf(m) + (m.hasData ? ' · เงินเดือน ' + fm2(m.base) + ' ฿ · OT ' + fm2(m.otAmount) + ' ฿ (' + m.otHours + ' ชม.) · ' + mgPct(m.otPct) : ' · ไม่มีข้อมูล') })), { money: true });
+  b3.appendChild(mgEl('div', '', '')).innerHTML = '<div style="font-weight:700;margin-top:16px">Manpower และ %Attendance</div>';
+  const g2 = mgEl('div'), cp2 = mgEl('div', 'mg-cap'); b3.append(g2, cp2);
+  b3.appendChild(mgLegend([['#64748b', 'Manpower (คน)'], ['#2563eb', '%Attendance', true]]));
+  mgCombo(g2, cp2, ms.map(m => ({ label: MN[m.month - 1], a: m.hasData ? m.manpower : 0, b: 0, pct: m.hasData ? m.attPct : null, none: !m.hasData,
+    cap: capOf(m) + (m.hasData ? ' · ' + m.manpower + ' คน · Attendance ' + mgPct(m.attPct) : ' · ไม่มีข้อมูล') })), { money: false, pctMax: 100, colorA: '#64748b' });
+  b3.appendChild(mgEl('div', 'muted', 'นับตามเดือนที่รอบเงินเดือนสิ้นสุด เช่น Nov = รอบ 26 ต.ค.–25 พ.ย. · เดือนที่ยังไม่มีข้อมูลลงเวลาในระบบจะเว้นว่าง · แตะแท่งเพื่อดูตัวเลข'));
+  // รายบุคคล
+  const ps = $('mgPersonSel'), pc = $('mgPersonCyc');
+  if (!mg.person && d.employees.length) mg.person = (d.employees.filter(e => e.position !== 'Manager (ผู้ดูแลระบบ)')[0] || d.employees[0]).code;
+  ps.innerHTML = ''; d.employees.forEach(e => { const o = document.createElement('option'); o.value = e.code; o.textContent = e.name + (e.position ? ' · ' + e.position : ''); if (e.code === mg.person) o.selected = true; ps.appendChild(o); });
+  if (!mg.pdata || mg.pdata.employee.code !== mg.person) loadMgrPerson();
+}
+function mgLegend(items) {
+  const l = mgEl('div', 'mg-leg');
+  items.forEach(x => { const s = mgEl('span'); const i = mgEl('i', x[2] ? 'ln' : ''); i.style.background = x[0]; s.append(i, document.createTextNode(x[1])); l.appendChild(s); });
+  return l;
+}
+// กราฟแท่งซ้อน (a ล่าง + b บน) แกนซ้าย + เส้น % แกนขวา · แตะแท่งดูตัวเลข
+function mgCombo(box, capEl, data, o) {
+  const NS = 'http://www.w3.org/2000/svg', W = 360, H = 190, L = 36, R = 30, T = 12, B = 22;
+  const pw = W - L - R, ph = H - T - B, bw = pw / data.length;
+  const mx = niceMax(Math.max(1, Math.max.apply(null, data.map(x => x.a + x.b))));
+  const pv = data.map(x => x.pct).filter(v => v != null), pmx = o.pctMax || Math.max(5, Math.ceil(Math.max.apply(null, pv.concat([1])) / 5) * 5);
+  const svg = document.createElementNS(NS, 'svg'); svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H); svg.setAttribute('role', 'img');
+  svg.style.cssText = 'width:100%;height:auto;display:block;margin-top:4px';
+  const el = (n, a, t) => { const e = document.createElementNS(NS, n); Object.keys(a).forEach(k => e.setAttribute(k, a[k])); if (t != null) e.textContent = t; svg.appendChild(e); return e; };
+  [0, 1, 2].forEach(i => { const y = T + ph - ph * i / 2;
+    el('line', { x1: L, x2: W - R, y1: y, y2: y, stroke: i ? '#e5e7eb' : '#9ca3af', 'stroke-width': i ? 1 : 1.2 });
+    el('text', { x: L - 4, y: y + 4, 'text-anchor': 'end', 'font-size': 10, fill: '#6b7280' }, o.money ? kfmt(mx * i / 2) : String(+(mx * i / 2).toFixed(1)));
+    el('text', { x: W - R + 4, y: y + 4, 'text-anchor': 'start', 'font-size': 10, fill: '#2563eb' }, Math.round(pmx * i / 2) + '%'); });
+  const groups = [];
+  data.forEach((x, i) => {
+    const bx = L + i * bw + bw * 0.16, w = bw * 0.68;
+    const ha = ph * x.a / mx, hb = ph * x.b / mx;
+    const ra = el('rect', { x: bx, y: T + ph - ha, width: w, height: Math.max(0, ha), fill: o.colorA || '#2d7a57' });
+    const rb = el('rect', { x: bx, y: T + ph - ha - hb, width: w, height: Math.max(0, hb), fill: '#f59e0b' });
+    if (x.none) el('text', { x: bx + w / 2, y: T + ph - 4, 'text-anchor': 'middle', 'font-size': 9, fill: '#cbd5e1' }, '–');
+    el('text', { x: L + i * bw + bw / 2, y: H - 7, 'text-anchor': 'middle', 'font-size': 9.5, fill: '#6b7280' }, x.label);
+    groups.push([ra, rb]);
+  });
+  // เส้น % (ข้ามเดือนที่ไม่มีข้อมูล)
+  let seg = [];
+  const flush = () => { if (seg.length > 1) el('polyline', { points: seg.join(' '), fill: 'none', stroke: '#2563eb', 'stroke-width': 2 }); seg = []; };
+  data.forEach((x, i) => { if (x.pct == null) { flush(); return; } const cx = L + i * bw + bw / 2, cy = T + ph - ph * Math.min(x.pct, pmx) / pmx; seg.push(cx + ',' + cy); });
+  flush();
+  data.forEach((x, i) => { if (x.pct == null) return; const cx = L + i * bw + bw / 2, cy = T + ph - ph * Math.min(x.pct, pmx) / pmx; el('circle', { cx: cx, cy: cy, r: 3, fill: '#fff', stroke: '#2563eb', 'stroke-width': 2 }); });
+  const pick = i => { groups.forEach((g, j) => { g[0].setAttribute('opacity', j === i ? 1 : .55); g[1].setAttribute('opacity', j === i ? 1 : .55); }); capEl.textContent = data[i].cap; };
+  data.forEach((x, i) => { const hit = el('rect', { x: L + i * bw, y: T, width: bw, height: ph + B, fill: 'transparent', style: 'cursor:pointer' }); hit.addEventListener('click', () => pick(i)); });
+  box.innerHTML = ''; box.appendChild(svg);
+  let last = -1; data.forEach((x, i) => { if (!x.none) last = i; }); pick(last >= 0 ? last : data.length - 1);
+}
+async function loadMgrPerson() {
+  const body = $('mgPersonBody'); if (!body || !mg.person) return;
+  const my = ++mg.pseq; body.style.opacity = '.5';
+  try {
+    const q = { action: 'mgrPerson', code: mg.person }; if (mg.pcycle) q.cycle = mg.pcycle;
+    const d = await call(q);
+    if (my !== mg.pseq || !$('mgPersonBody')) return;
+    mg.pdata = d;
+    renderMgrPerson(d);
+  } catch (e) { if (e.code === 'AUTH') return; body.style.opacity = ''; body.innerHTML = ''; body.appendChild(mgEl('div', 'muted', 'โหลดไม่ได้: ' + e.message)); }
+}
+function renderMgrPerson(d) {
+  const body = $('mgPersonBody'); body.innerHTML = ''; body.style.opacity = '';
+  const pc = $('mgPersonCyc'); pc.innerHTML = '';
+  d.cycles.forEach((c, i) => { const o = document.createElement('option'); o.value = c.key; o.textContent = (i === 0 ? 'รอบปัจจุบัน ' : '') + fd(c.start) + ' – ' + fd(c.end); if (c.key === d.cycle.key) o.selected = true; pc.appendChild(o); });
+  const t = d.totals, p = d.pay;
+  if (p.flag) body.appendChild(mgEl('div', 'muted', '⚠ ' + p.flag));
+  body.appendChild(mgEl('div', 'muted', (d.asOf ? 'ข้อมูลถึง ' + fd(d.asOf) : 'รอบเพิ่งเริ่ม') + (p.official ? ' · เงินเดือนที่อนุมัติแล้ว' : ' · ตัวเลขสด ยังไม่เป็นทางการ') + ' · แตะหัวข้อเพื่อดูรายวัน'));
+  const pick = k => { if (k !== undefined) mg.popen = k; return mg.popen || ''; };
+  const it = k => d.items.filter(x => k.indexOf(x.kind) >= 0);
+  const rows = (l, arr, f) => { if (!arr.length) { l.appendChild(mgEl('div', 'muted', '— ไม่มีในรอบนี้ —')); return; } arr.forEach(x => { const r = mgEl('div', 'it'); const v = f(x); r.append(mgEl('div', 'dt', v[0]), mgEl('div', '', v[1])); l.appendChild(r); }); };
+  const defs = d.noClock ? [] : [
+    { k: 'absent', label: 'ขาดงาน', value: t.absentDays + ' วัน', sub: t.noPunchCount ? 'รวมไม่รูดบัตร ' + t.noPunchCount + ' ครั้ง' : '', warn: t.absentDays > 0, list: l => rows(l, it(['absent', 'nopunch']), x => [msDay(x.date), x.text]) },
+    { k: 'late', label: 'มาสาย', value: t.lateCount + ' ครั้ง', sub: t.lateCount ? t.lateMins + ' นาที' : '', warn: t.lateCount > 0, list: l => rows(l, it(['late', 'early']), x => [msDay(x.date), x.text]) }
+  ];
+  defs.splice(1, 0, { k: 'leave', label: 'ลา (อนุมัติแล้ว)', value: t.leaveDays + ' วัน', sub: t.leavePending ? 'รออนุมัติ ' + t.leavePending + ' วัน' : '',
+    list: l => rows(l, d.leave, x => [x.start === x.end ? msDay(x.start) : fd(x.start) + '–' + fd(x.end), x.typeLabel + (x.half ? ' (' + x.half + ')' : '') + ' · ' + x.days + ' วัน · ' + x.statusLabel]) });
+  defs.push({ k: 'ot', label: 'OT', value: p.otHours + ' ชม.', sub: mg0(p.otAmount) + ' ฿', list: l => rows(l, d.ot, x => [msDay(x.date), x.start + '–' + x.end + ' · ' + (x.status === 'approved' ? 'ทำจริง ' + x.actualHours + ' ชม.' : 'ขอ ' + x.hours + ' ชม.') + ' · ' + x.statusLabel]) });
+  defs.push({ k: 'sal', label: 'เงินเดือนพื้นฐาน', value: mg0(p.base) + ' ฿', sub: p.attPct != null ? 'Attendance ' + mgPct(p.attPct) : '' });
+  defs.push({ k: 'pct', label: '%OT / Salary', value: mgPct(p.otPct) });
+  const [tl, list] = mgTiles(defs, mg.popen, pick);
+  body.append(tl, list);
+  if (!d.noClock && d.days && d.days.length) {
+    const tg = mgEl('button', 'rep-link', mg.pdays ? 'ซ่อนตารางเข้า-ออกงานรายวัน ▲' : 'ดูตารางเข้า-ออกงานรายวัน ▼');
+    const wrap = mgEl('div'); body.append(tg, wrap);
+    const fill = () => { wrap.innerHTML = ''; if (mg.pdays) wrap.appendChild(repTable(['วันที่', 'เข้า', 'ออก', 'สถานะ'], d.days.slice().reverse().map(x => ({ cls: 'k-' + x.kind, cells: [[msDay(x.date), 'd'], [x.in || '–', 't'], [x.out || '–', 't'], [x.status, 's']] })))); };
+    tg.onclick = () => { mg.pdays = !mg.pdays; tg.textContent = mg.pdays ? 'ซ่อนตารางเข้า-ออกงานรายวัน ▲' : 'ดูตารางเข้า-ออกงานรายวัน ▼'; fill(); };
+    fill();
+  }
+}
 const VIEW_LABEL = { manager:'ผู้จัดการ', hr:'HR', employee:'พนักงาน' };
 function isApprover() { const m = state.me || {}; return m.role === 'admin' || m.position === 'Manager (ผู้ดูแลระบบ)'; }
 function viewMode() {
@@ -2128,11 +2335,8 @@ function renderDash(d) {
     applyViewNav();
     box.classList.toggle('mgrdash', v === 'manager');
     if (v === 'manager') {
-      if (d.org) box.appendChild(mgrAttendance(d.org, d.today));
-      if (d.finance) box.appendChild(mgrCost(d.finance, d.cycle));
-      box.appendChild(mgrChartCard());
-      loadMgrHistory();
-      if (d.me && d.me.pay && d.me.pay.gross) { const c = myPayCard(d); c.classList.add('span2'); box.appendChild(c); }
+      // หน้าหลักผู้จัดการ: รายวัน / รอบเดือนปัจจุบัน / 12 เดือน / รายบุคคล (ไม่แสดงข้อมูลอื่น)
+      mgBuild(box);
     } else if (v === 'hr') {
       if (d.finance) box.appendChild(financeSection(d.finance, d.cycle));
       if (d.org) box.appendChild(groupSection('ภาพรวมบริษัท', d.org, 'พนักงาน', d.cycle));
@@ -2144,7 +2348,6 @@ function renderDash(d) {
       box.appendChild(mySummaryCard());
       box.appendChild(meSection(d));
     }
-    if (v === 'manager' && (state.me || {}).position !== 'Manager (ผู้ดูแลระบบ)') { const c = mySummaryCard(); c.classList.add('span2'); box.appendChild(c); }
     if ($('msumBody')) {
       // renderDash ถูกเรียกซ้ำ (ของเก่าในเครื่อง แล้วของใหม่) ใช้ข้อมูลที่มีอยู่ก่อน และโหลดใหม่ไม่ถี่กว่า 20 วินาที
       if (state.msum) renderMySummary(state.msum);
