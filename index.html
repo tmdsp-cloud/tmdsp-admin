@@ -155,6 +155,17 @@
   .msum-list .dt { font-weight:700; min-width:92px; white-space:nowrap; }
   .msum-list .st { font-size:12px; padding:1px 8px; border-radius:999px; background:#fef3c7; color:#92400e; margin-left:6px; white-space:nowrap; }
   .msum-list .st.ok { background:#dcfce7; color:#166534; }
+  .rep-t { width:100%; border-collapse:collapse; font-size:13.5px; }
+  .rep-t th { text-align:left; font-size:12px; color:var(--muted); font-weight:600; padding:6px 4px; border-bottom:2px solid var(--line); position:sticky; top:0; background:var(--card); }
+  .rep-t td { padding:7px 4px; border-bottom:1px solid var(--line); vertical-align:top; }
+  .rep-t td.d { white-space:nowrap; font-weight:600; }
+  .rep-t td.t { white-space:nowrap; text-align:center; font-variant-numeric:tabular-nums; }
+  .rep-t tr.k-off td { color:var(--muted); background:rgba(127,127,127,.06); }
+  .rep-t tr.k-bad td.s { color:#dc2626; font-weight:600; }
+  .rep-t tr.k-warn td.s { color:#c2410c; }
+  .rep-t tr.k-leave td.s { color:#2563eb; }
+  .rep-t tr.k-today td.s { color:#7c3aed; }
+  .rep-link { display:block; margin-top:10px; text-align:center; font-size:14px; color:var(--brand); background:none; border:0; width:100%; padding:6px; cursor:pointer; }
   button.gray { background:#eef1f4; color:var(--text); }
   button, .btn { border-radius:16px; }
   button.link { color:var(--muted); }
@@ -274,6 +285,7 @@
   <button class="nv" data-nav="exp" id="navExp"><i>🚗</i>เบิกค่าเดินทาง<span class="dot hidden" id="navDotExp"></span></button>
   <button class="nv" data-nav="pc" id="navPc"><i>💰</i>เบิกเงินสดย่อย<span class="dot hidden" id="navDotPc"></span></button>
   <button class="nv" data-nav="pay"><i>💵</i>เงินเดือน<span class="dot hidden" id="navDotPay"></span></button>
+  <button class="nv" data-nav="rep"><i>📊</i>รายงานของฉัน</button>
   <button class="nv" data-nav="cal"><i>📅</i>ปฏิทิน</button>
   <button class="nv" data-nav="crm"><i>🤝</i>CRM<small style="margin-left:auto;opacity:.6">เปิดหน้าใหม่ ↗</small></button>
   <button class="nv" data-nav="manage" id="navManage"><i>👥</i>จัดการพนักงาน</button>
@@ -543,6 +555,21 @@
       <div id="manageMsg"></div>
     </div>
     <div class="card" id="empList"></div>
+  </div>
+
+  <!-- รายงานของฉัน (รายรอบเงินเดือน) -->
+  <div id="repView" class="hidden">
+    <div class="card">
+      <div class="top"><h1>รายงานของฉัน</h1></div>
+      <select id="repCycle" style="margin-top:8px"></select>
+      <div class="pctabs" style="margin-top:10px">
+        <button id="repTabA" class="primary">เข้า-ออกงาน</button>
+        <button id="repTabO" class="gray">OT</button>
+        <button id="repTabL" class="gray">วันลา</button>
+      </div>
+      <div id="repSum" class="muted" style="margin-top:10px;font-size:13px"></div>
+    </div>
+    <div class="card" id="repBody"><div class="muted">กำลังโหลด...</div></div>
   </div>
 
   <!-- ปฏิทิน -->
@@ -850,12 +877,12 @@ function prefetchAll() {
 }
 
 function show(id) {
-  ['loading','loginView','mainView','manageView','leaveView','otView','expView','pcView','otReportView','payView','calView'].forEach(v => $(v).classList.toggle('hidden', v !== id));
+  ['loading','loginView','mainView','manageView','leaveView','otView','expView','pcView','otReportView','payView','calView','repView'].forEach(v => $(v).classList.toggle('hidden', v !== id));
   document.querySelector('.wrap').classList.toggle('main', id === 'mainView');
   const inApp = !['loading','loginView'].includes(id);
   $('topbar').classList.toggle('hidden', !inApp); $('navbar').classList.toggle('hidden', !inApp); $('sbOv').classList.toggle('hidden', !inApp);
   document.body.classList.toggle('has-sb', inApp); sbClose();
-  const navOf = { mainView:'home', leaveView:'leave', otView:'ot', expView:'exp', pcView:'pc', payView:'pay', calView:'cal', manageView:'manage', otReportView:'manage' }[id];
+  const navOf = { mainView:'home', leaveView:'leave', otView:'ot', expView:'exp', pcView:'pc', payView:'pay', calView:'cal', repView:'rep', manageView:'manage', otReportView:'manage' }[id];
   document.querySelectorAll('#navbar .nv').forEach(b => b.classList.toggle('on', b.dataset.nav === navOf));
   window.scrollTo(0, 0);
 }
@@ -1229,6 +1256,7 @@ document.querySelectorAll('#navbar .nv').forEach(b => b.onclick = () => {
   if (k === 'crm') { openCrm(); return; }
   if (k === 'home') { loadStatus().catch(() => show('mainView')); }
   else if (k === 'cal') openCalendar();
+  else if (k === 'rep') openReport('');
   else $({ leave:'leaveBtn', ot:'otBtn', exp:'expBtn', pc:'pcBtn', pay:'payBtn', manage:'manageBtn' }[k]).click();
 });
 // CRM เป็นเว็บแอปแยก (Apps Script โดเมน tmdsp.co.th) ล็อกอินด้วยบัญชี Google บริษัท เปิดในเบราว์เซอร์ ไม่ฝังในแอป
@@ -1569,7 +1597,7 @@ async function loadPayMine() {
       box.appendChild(card);
     }
     const n = document.createElement('div'); n.className = 'muted'; n.style.cssText = 'font-size:12px;padding:0 4px 8px';
-    n.textContent = 'หักประกันสังคม ' + r.ssRate + '% สูงสุด ' + money(r.ssCap) + ' บาท (สัญญาจ้างไม่หัก) · สัญญาจ้างหัก ณ ที่จ่าย ' + (r.whtRate == null ? 3 : r.whtRate) + '% · มาสาย/ออกก่อนหักตามนาที × ' + r.penaltyMult;
+    n.textContent = 'หักประกันสังคม ' + r.ssRate + '% ของเงินเดือนพื้นฐาน (ไม่รวม OT/ค่าคอม/เบี้ยต่างๆ) สูงสุด ' + money(r.ssCap) + ' บาท (สัญญาจ้างไม่หัก) · สัญญาจ้างหัก ณ ที่จ่าย ' + (r.whtRate == null ? 3 : r.whtRate) + '% · มาสาย/ออกก่อนหักตามนาที × ' + r.penaltyMult;
     box.appendChild(n);
     });
   } catch (e) {
@@ -1872,7 +1900,73 @@ function renderMySummary(d) {
     tl.appendChild(tt);
   });
   body.append(tl, list);
+  const lk = document.createElement('button'); lk.className = 'rep-link'; lk.textContent = '📊 ดูรายงานรายวันทั้งรอบ (เข้า-ออกงาน / OT / วันลา) →';
+  lk.onclick = () => openReport(d.cycle.key === (d.cycles[0] || {}).key ? '' : d.cycle.key);
+  body.appendChild(lk);
   if (open) draw(open);
+}
+/* ---------- รายงานของฉัน: ตารางเข้า-ออกงาน / OT / วันลา ต่อรอบเงินเดือน (ใช้ข้อมูลชุดเดียวกับการ์ดสรุป) ---------- */
+const repState = { tab: 'A', data: null };
+function repTab(t) {
+  repState.tab = t;
+  ['A', 'O', 'L'].forEach(x => { $('repTab' + x).className = x === t ? 'primary' : 'gray'; });
+  if (repState.data) renderReport(repState.data);
+}
+['A', 'O', 'L'].forEach(x => { $('repTab' + x).onclick = () => repTab(x); });
+$('repCycle').onchange = () => { const d = repState.data; openReport(d && $('repCycle').value === (d.cycles[0] || {}).key ? '' : $('repCycle').value); };
+async function openReport(cycle) {
+  show('repView');
+  const key = 'msum_' + (state.me ? state.me.code : '') + '_' + (cycle || 'cur');
+  const have = state.msum && (cycle ? state.msum.cycle.key === cycle : state.msum.cycle.key === (state.msum.cycles[0] || {}).key) ? state.msum : null;
+  let c = have; if (!c) { try { c = JSON.parse(store.get(key) || 'null'); } catch (e) {} }
+  if (c && c.days) renderReport(c); else $('repBody').innerHTML = '<div class="muted">กำลังโหลด...</div>';
+  try {
+    const d = await call(cycle ? { action:'mySummary', cycle: cycle } : { action:'mySummary' });
+    try { store.set(key, JSON.stringify(d)); } catch (e) {}
+    if (!cycle) state.msum = d;
+    renderReport(d);
+  } catch (e) {
+    if (e.code === 'AUTH') return;
+    if (!(c && c.days)) { $('repBody').innerHTML = ''; const m = document.createElement('div'); m.className = 'muted'; m.textContent = 'โหลดรายงานไม่ได้: ' + e.message + ' (หากเพิ่งอัปเดต ตรวจว่า Deploy Apps Script เวอร์ชันใหม่แล้ว)'; $('repBody').appendChild(m); }
+  }
+}
+function repTable(head, rows) {
+  const t = document.createElement('table'); t.className = 'rep-t';
+  const tr = document.createElement('tr'); head.forEach(x => { const th = document.createElement('th'); th.textContent = x; tr.appendChild(th); }); t.appendChild(tr);
+  rows.forEach(rw => {
+    const r = document.createElement('tr'); if (rw.cls) r.className = rw.cls;
+    rw.cells.forEach(c => { const td = document.createElement('td'); td.className = c[1] || ''; td.textContent = c[0]; r.appendChild(td); });
+    t.appendChild(r);
+  });
+  return t;
+}
+function renderReport(d) {
+  repState.data = d;
+  const sel = $('repCycle'); sel.innerHTML = '';
+  (d.cycles || []).forEach((c, i) => { const o = document.createElement('option'); o.value = c.key; o.textContent = (i === 0 ? 'รอบปัจจุบัน ' : '') + fd(c.start) + ' – ' + fd(c.end); if (c.key === d.cycle.key) o.selected = true; sel.appendChild(o); });
+  const body = $('repBody'); body.innerHTML = '';
+  const t = d.totals || {}, tab = d.noClock && repState.tab === 'A' ? 'O' : repState.tab;
+  $('repTabA').classList.toggle('hidden', !!d.noClock);
+  ['A', 'O', 'L'].forEach(x => { $('repTab' + x).className = x === tab ? 'primary' : 'gray'; });
+  const empty = txt => { const e = document.createElement('div'); e.className = 'muted'; e.textContent = txt; body.appendChild(e); };
+  if (tab === 'A') {
+    $('repSum').textContent = 'ขาด ' + t.absentDays + ' วัน · ลา ' + t.leaveDays + ' วัน · สาย ' + t.lateCount + ' ครั้ง (' + t.lateMins + ' นาที) · ไม่รูดบัตร ' + t.noPunchCount + ' ครั้ง' + (t.earlyCount ? ' · ออกก่อน ' + t.earlyCount + ' ครั้ง' : '');
+    if (!d.days || !d.days.length) return empty('— ยังไม่มีวันในรอบนี้ —');
+    body.appendChild(repTable(['วันที่', 'เข้า', 'ออก', 'สถานะ'], d.days.slice().reverse().map(x => ({ cls: 'k-' + x.kind, cells: [[msDay(x.date), 'd'], [x.in || '–', 't'], [x.out || '–', 't'], [x.status, 's']] }))));
+  } else if (tab === 'O') {
+    $('repSum').textContent = 'OT ทำจริง ' + t.otHours + ' ชม. (' + t.otCount + ' ครั้ง ที่อนุมัติ)' + (t.otPending ? ' · รออนุมัติ ' + t.otPending + ' ชม.' : '');
+    if (!d.ot.length) return empty('— ไม่มี OT ในรอบนี้ —');
+    body.appendChild(repTable(['วันที่', 'เวลาที่ขอ', 'ทำจริง', 'สถานะ'], d.ot.map(x => ({ cls: x.status === 'approved' ? '' : 'k-today',
+      cells: [[msDay(x.date), 'd'], [x.start + '–' + x.end + '\n(' + x.hours + ' ชม.)', 't'], [x.status === 'approved' ? x.actualHours + ' ชม.' : '–', 't'],
+        [x.statusLabel + (x.status === 'approved' && x.checkText && !x.saved ? '\n' + x.checkText : ''), 's']] }))));
+    body.querySelectorAll('td').forEach(td => { td.style.whiteSpace = td.className === 'd' ? 'nowrap' : 'pre-line'; });
+  } else {
+    $('repSum').textContent = 'ลาที่อนุมัติ ' + t.leaveDays + ' วัน' + (t.leavePending ? ' · รออนุมัติ ' + t.leavePending + ' วัน' : '') + ' (นับเฉพาะวันที่อยู่ในรอบนี้)';
+    if (!d.leave.length) return empty('— ไม่มีการลาในรอบนี้ —');
+    body.appendChild(repTable(['วันที่', 'ประเภท', 'วัน', 'สถานะ'], d.leave.map(x => ({ cls: x.status === 'approved' ? 'k-leave' : 'k-today',
+      cells: [[x.start === x.end ? msDay(x.start) : fd(x.start) + ' – ' + fd(x.end), 'd'], [x.typeLabel + (x.half ? ' (' + x.half + ')' : '') + (x.reason ? '\n' + x.reason : ''), ''], [String(x.days), 't'], [x.statusLabel, 's']] }))));
+    body.querySelectorAll('td').forEach(td => { td.style.whiteSpace = td.className === 'd' || td.className === 't' ? 'nowrap' : 'pre-line'; });
+  }
 }
 const VIEW_LABEL = { manager:'ผู้จัดการ', hr:'HR', employee:'พนักงาน' };
 function isApprover() { const m = state.me || {}; return m.role === 'admin' || m.position === 'Manager (ผู้ดูแลระบบ)'; }
